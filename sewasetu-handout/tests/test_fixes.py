@@ -1,3 +1,5 @@
+from datetime import date
+
 import pytest
 from app.app import app, get_db
 
@@ -52,6 +54,48 @@ def test_password_reset_uses_parameterized_mobile_lookup(client, monkeypatch):
     assert executed == [
         ("SELECT mobile FROM portal_users WHERE mobile = %s", (injection,))
     ]
+
+def test_password_reset_parameterizes_account_lookup_and_update(client, monkeypatch):
+    mobile = "9876543210"
+    executed = []
+    results = [(mobile,), (date(1940, 1, 2),)]
+    connection_state = {"committed": False}
+
+    class Cursor:
+        def execute(self, query, params=None):
+            executed.append((query, params))
+
+        def fetchone(self):
+            return results.pop(0)
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def commit(self):
+            connection_state["committed"] = True
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("app.app.get_db", lambda: Connection())
+    monkeypatch.setattr("app.app.send_sms", lambda *_: None)
+
+    response = client.post("/status/reset", data={"mobile": mobile})
+
+    assert response.status_code == 200
+    assert executed == [
+        ("SELECT mobile FROM portal_users WHERE mobile = %s", (mobile,)),
+        ("SELECT dob FROM applications WHERE mobile = %s LIMIT 1", (mobile,)),
+        (
+            "UPDATE portal_users SET password_hash = %s WHERE mobile = %s",
+            ("02011940", mobile),
+        ),
+    ]
+    assert connection_state["committed"]
 
 def test_database_connection_is_reused_and_closed_at_request_teardown(monkeypatch):
     connections = []
