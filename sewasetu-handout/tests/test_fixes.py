@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
-from app.app import app, get_db
+from fpdf import FPDF
+from app import app as app_module
+from app.app import app, get_db, hash_password
 
 @pytest.fixture
 def client():
@@ -92,7 +94,7 @@ def test_password_reset_parameterizes_account_lookup_and_update(client, monkeypa
         ("SELECT dob FROM applications WHERE mobile = %s LIMIT 1", (mobile,)),
         (
             "UPDATE portal_users SET password_hash = %s WHERE mobile = %s",
-            ("02011940", mobile),
+            (hash_password("02011940"), mobile),
         ),
     ]
     assert connection_state["committed"]
@@ -143,16 +145,74 @@ def test_database_connection_reopens_after_explicit_close(monkeypatch):
     assert len(connections) == 2
     assert all(connection.closed for connection in connections)
 
-def test_acknowledgment_pdf_performance(client):
-    """Test that acknowledgment PDF generation executes cleanly."""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM applications LIMIT 1")
-    row = cur.fetchone()
-    if row:
-        app_id = row[0]
-        response = client.get(f"/ack/{app_id}.pdf")
-        assert response.status_code == 200
-        assert response.mimetype == "application/pdf"
-    cur.close()
-    conn.close()
+def test_acknowledgment_pdf_executes_with_bounded_rendering(
+    client, monkeypatch, tmp_path
+):
+    """Generate an acknowledgment PDF using a fixed number of drawing operations."""
+    app_id = 42
+    application = (
+        "SSP26123456",
+        "Asha Devi",
+        "9876543210",
+        date(1940, 1, 2),
+        "Sonapur",
+        "Sonari",
+        "1234567890",
+        "ABCD0123456",
+        datetime(2026, 1, 1, 12, 0),
+        "PENDING",
+    )
+    executed = []
+
+    class Cursor:
+        def execute(self, query, params=None):
+            executed.append((query, params))
+
+        def fetchone(self):
+            return (app_id,) if len(executed) == 1 else application
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    class CountingPDF(FPDF):
+        def __init__(self):
+            super().__init__()
+            self.rect_calls = 0
+            self.cell_calls = 0
+
+        def rect(self, *args, **kwargs):
+            self.rect_calls += 1
+            return super().rect(*args, **kwargs)
+
+        def cell(self, *args, **kwargs):
+            self.cell_calls += 1
+            return super().cell(*args, **kwargs)
+
+    rendered_pdfs = []
+
+    def make_pdf():
+        pdf = CountingPDF()
+        rendered_pdfs.append(pdf)
+        return pdf
+
+    monkeypatch.setattr(app_module, "get_db", lambda: Connection())
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(app_module, "FPDF", make_pdf)
+
+    response = client.get(f"/ack/{app_id}.pdf")
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF")
+    assert executed[0][1] == (app_id,)
+    assert executed[1][1] == (app_id,)
+    assert len(rendered_pdfs) == 1
+    assert rendered_pdfs[0].rect_calls == 1
+    assert rendered_pdfs[0].cell_calls == 23
