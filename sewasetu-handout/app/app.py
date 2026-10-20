@@ -17,8 +17,8 @@ from datetime import datetime, date, timedelta
 
 import requests
 import psycopg2
-from flask import (Flask, request, session, redirect, url_for, render_template,
-                   flash, send_file, abort, jsonify)
+from flask import (Flask, g, has_app_context, request, session, redirect,
+                   url_for, render_template, flash, send_file, abort, jsonify)
 from fpdf import FPDF
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,13 +56,28 @@ except Exception:
 
 
 def get_db():
-    return psycopg2.connect(
+    if has_app_context():
+        conn = g.get("db_conn")
+        if conn is not None and not conn.closed:
+            return conn
+
+    conn = psycopg2.connect(
         host=config.get("database", "host"),
         port=config.get("database", "port"),
         dbname=config.get("database", "name"),
         user=config.get("database", "user"),
         password=config.get("database", "password"),
     )
+    if has_app_context():
+        g.db_conn = conn
+    return conn
+
+
+@app.teardown_appcontext
+def close_db(error=None):
+    conn = g.pop("db_conn", None)
+    if conn is not None and not conn.closed:
+        conn.close()
 
 
 def sanitize(value, maxlen=20):
@@ -522,7 +537,7 @@ def admin_view(app_id):
 @app.route("/admin/approve/<int:app_id>", methods=["POST"])
 def admin_approve(app_id):
     # FIXED: Enforce strict admin session check instead of regular user login
-    if not session.get("admin"):
+    if session.get("admin") is not True:
         abort(403)
     conn = get_db()
     cur = conn.cursor()
@@ -537,7 +552,7 @@ def admin_approve(app_id):
 @app.route("/admin/reject/<int:app_id>", methods=["POST"])
 def admin_reject(app_id):
     # FIXED: Enforce strict admin session check instead of regular user login
-    if not session.get("admin"):
+    if session.get("admin") is not True:
         abort(403)
     conn = get_db()
     cur = conn.cursor()
