@@ -6,7 +6,8 @@
 knowledge and belief. I understand that furnishing false information is punishable
 under applicable law and will result in cancellation of pension.</p>
 <form method="post">
-  <p><input type="checkbox" required> I agree to the above declaration.</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p><label><input type="checkbox" required> I agree to the above declaration.</label></p>
   <p><button class="btn" type="submit">Submit Application</button></p>
 </form>
 {% endblock %}

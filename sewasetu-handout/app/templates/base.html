@@ -2,28 +2,40 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b3d6e">
 <title>Sewa Setu - Old Age Pension Portal</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f0f2f5;color:#222}
-.header{background:#0b3d6e;color:#fff;padding:14px 28px}
-.header h1{margin:0;font-size:22px}
-.header .sub{font-size:13px;color:#cfe0f3}
-.band{background:#f7931e;height:5px}
-.container{max-width:860px;margin:24px auto;background:#fff;padding:28px;
-border:1px solid #d7dbe0;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.btn{background:#0b3d6e;color:#fff;border:none;padding:10px 22px;font-size:15px;cursor:pointer}
-.btn:hover{background:#0d4a85}
-label{display:block;margin:12px 0 4px;font-weight:bold;font-size:14px}
-input[type=text],input[type=password],select{width:100%;max-width:420px;padding:8px;
-border:1px solid #aab;font-size:14px}
-.flash{background:#fdecea;border:1px solid #e57373;color:#a33;padding:10px 14px;margin:14px 0}
-.note{font-size:13px;color:#555}
-.footer{max-width:860px;margin:10px auto 40px;font-size:12px;color:#666;text-align:center}
-.footer a{color:#0b3d6e;margin:0 8px}
-table.tbl{border-collapse:collapse;width:100%}
-table.tbl td,table.tbl th{border:1px solid #ccd;padding:7px 10px;font-size:14px;text-align:left}
-.steps{font-size:13px;color:#777;margin-bottom:18px}
+*{box-sizing:border-box}
+:root{font-family:Arial,Helvetica,sans-serif;color:#192b3a;background:#f3f6f8;font-synthesis:none}
+body{margin:0;line-height:1.55}
+a{color:#0b4b7a}
+a:hover{text-decoration-thickness:2px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #e98b1b;outline-offset:2px}
+.header{background:#0b3d6e;color:#fff;padding:18px max(20px,calc((100% - 1040px)/2))}
+.header h1{margin:0;font-size:clamp(20px,3vw,27px);line-height:1.25}
+.header .sub{font-size:14px;color:#d7e6f4;margin-top:4px}
+.band{height:5px;background:#f7931e}
+.site-nav{display:flex;flex-wrap:wrap;gap:8px 20px;background:#fff;padding:10px max(20px,calc((100% - 1040px)/2));border-bottom:1px solid #dce3e8}
+.site-nav a{font-weight:600;text-decoration:none}
+.container{width:min(100% - 32px,920px);min-height:50vh;margin:26px auto;background:#fff;padding:clamp(20px,4vw,36px);border:1px solid #dce3e8;border-radius:10px;box-shadow:0 4px 18px rgba(22,49,70,.06)}
+h2{margin-top:0;color:#123c5d}
+.btn{display:inline-flex;align-items:center;justify-content:center;background:#0b3d6e;color:#fff;border:0;border-radius:5px;padding:11px 20px;font-size:15px;font-weight:700;text-decoration:none;cursor:pointer}
+.btn:hover{background:#0d4a85;color:#fff}
+label{display:block;margin:14px 0 5px;font-weight:700;font-size:14px}
+input[type=text],input[type=password],input[type=tel],input[type=date],input[type=file],select{width:100%;max-width:480px;min-height:42px;padding:9px 11px;border:1px solid #aebbc5;border-radius:4px;background:#fff;font:inherit}
+input[type=file]{padding:7px}
+form{max-width:640px}
+.flash{background:#fff4e5;border:1px solid #e7a94d;border-left:5px solid #d37900;color:#593500;padding:12px 15px;margin:0 0 18px;border-radius:4px}
+.note{font-size:14px;color:#536574}
+.footer{width:min(100% - 32px,920px);margin:10px auto 36px;font-size:13px;color:#536574;text-align:center}
+.footer a{margin:0 6px}
+table.tbl{border-collapse:collapse;width:100%;margin:12px 0 20px}
+table.tbl td,table.tbl th{border:1px solid #d5dde3;padding:9px 11px;font-size:14px;text-align:left;vertical-align:top}
+table.tbl th{background:#edf3f7}
+.steps{font-size:14px;color:#536574;margin-bottom:18px}
 .steps b{color:#0b3d6e}
+@media(max-width:640px){.site-nav{gap:8px 14px}.container{width:100%;margin:0 auto 18px;border-radius:0;border-left:0;border-right:0}.tbl{display:block;overflow-x:auto;white-space:nowrap}.footer{margin-top:22px}}
 </style>
 </head>
 <body>
@@ -32,19 +44,24 @@ table.tbl td,table.tbl th{border:1px solid #ccd;padding:7px 10px;font-size:14px;
   <div class="sub">Department of Social Welfare &middot; Government of Purvanchal</div>
 </div>
 <div class="band"></div>
+<nav class="site-nav" aria-label="Main navigation">
+  <a href="{{ url_for('index') }}">Home</a>
+  <a href="{{ url_for('about') }}">Scheme information</a>
+  <a href="{{ url_for('apply') }}">Apply</a>
+  <a href="{{ url_for('status_login') }}">Check status</a>
+  <a href="{{ url_for('admin_login') }}">Staff</a>
+</nav>
 <div class="container">
 {% with messages = get_flashed_messages() %}
-  {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% for m in messages %}<div class="flash" role="alert">{{ m }}</div>{% endfor %}
 {% endwith %}
 {% block content %}{% endblock %}
 </div>
 <div class="footer">
-  <a href="/about">About the Scheme</a> |
-  <a href="/rti">RTI</a> |
-  <a href="/grievance">Grievance Cell</a> |
-  <a href="http://swd.purvanchal.nic.in/pension-rules-2019.pdf">Pension Rules 2019</a> |
-  <a href="/contact">Contact Us</a><br>
-  Site designed &amp; developed by Netlink Infosolutions Pvt Ltd. Best viewed in 1024x768.
+  <a href="{{ url_for('about') }}">About the Scheme</a> |
+  <a href="{{ url_for('apply') }}">Apply for pension</a> |
+  <a href="{{ url_for('status_login') }}">Application status</a><br>
+  Department of Social Welfare &middot; Government of Purvanchal
 </div>
 </body>
 </html>

@@ -68,9 +68,7 @@ def test_main_logs_sms_dispatch_results(monkeypatch, scheduler_log, capsys):
     log_path = scheduler_log
     cursor = FakeCursor(rows=[("SSP26123456", "9876543210"), ("SSP26765432", "9876543211")])
     connection = FakeConnection(cursor)
-    monkeypatch.setattr(
-        deemed_approval.psycopg2, "connect", lambda **_: connection, raising=False
-    )
+    monkeypatch.setattr(deemed_approval, "connect_db", lambda: connection)
     responses = iter([
         SimpleNamespace(status_code=200, text='{"status":"queued"}',
                         json=lambda: {"status": "queued"}),
@@ -99,9 +97,7 @@ def test_main_logs_sms_dispatch_results(monkeypatch, scheduler_log, capsys):
 def test_main_rolls_back_and_closes_on_database_failure(monkeypatch, scheduler_log):
     cursor = FakeCursor(execute_error=RuntimeError("database unavailable"))
     connection = FakeConnection(cursor)
-    monkeypatch.setattr(
-        deemed_approval.psycopg2, "connect", lambda **_: connection, raising=False
-    )
+    monkeypatch.setattr(deemed_approval, "connect_db", lambda: connection)
     sms_called = []
     monkeypatch.setattr(
         deemed_approval.requests,

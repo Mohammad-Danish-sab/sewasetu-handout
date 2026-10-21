@@ -12,13 +12,21 @@ import io
 import csv
 import random
 import hashlib
+import re
+import secrets
 import configparser
+import uuid
 from datetime import datetime, date, timedelta
 
 import requests
 import psycopg2
+if __package__:
+    from .db import connect_db
+else:
+    from db import connect_db
 from flask import (Flask, g, has_app_context, request, session, redirect,
                    url_for, render_template, flash, send_file, abort, jsonify)
+from flask_wtf.csrf import CSRFProtect
 from fpdf import FPDF
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -27,11 +35,28 @@ config = configparser.ConfigParser()
 config.read(os.path.join(BASE_DIR, "config", "app.ini"))
 
 app = Flask(__name__)
-app.secret_key = config.get("app", "secret_key")
+secret_key = os.environ.get("SEWASETU_SECRET_KEY")
+if not secret_key:
+    raise RuntimeError("SEWASETU_SECRET_KEY must be set before starting the portal.")
+if len(secret_key) < 32:
+    raise RuntimeError("SEWASETU_SECRET_KEY must contain at least 32 characters.")
+app.secret_key = secret_key
 app.config["PERMANENT_SESSION_LIFETIME"] = 300
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+CSRFProtect(app)
 
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "sewasetu@123"
+ADMIN_USERNAME = os.environ.get("SEWASETU_ADMIN_USERNAME")
+ADMIN_PASSWORD = os.environ.get("SEWASETU_ADMIN_PASSWORD")
+if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+    raise RuntimeError("Set SEWASETU_ADMIN_USERNAME and SEWASETU_ADMIN_PASSWORD.")
+if len(ADMIN_PASSWORD) < 12:
+    raise RuntimeError("SEWASETU_ADMIN_PASSWORD must contain at least 12 characters.")
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+PDF_UNICODE_FONT = os.environ.get(
+    "SEWASETU_UNICODE_FONT",
+    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+)
 
 SMS_GATEWAY_URL = config.get("app", "sms_gateway_url")
 OTP_VALIDITY_SECONDS = config.getint("app", "otp_validity_seconds")
@@ -61,13 +86,7 @@ def get_db():
         if conn is not None and not conn.closed:
             return conn
 
-    conn = psycopg2.connect(
-        host=config.get("database", "host"),
-        port=config.get("database", "port"),
-        dbname=config.get("database", "name"),
-        user=config.get("database", "user"),
-        password=config.get("database", "password"),
-    )
+    conn = connect_db()
     if has_app_context():
         g.db_conn = conn
     return conn
@@ -80,12 +99,10 @@ def close_db(error=None):
         conn.close()
 
 
-def sanitize(value, maxlen=20):
+def sanitize(value, maxlen=100):
     if value is None:
         return ""
-    value = value.strip()
-    encoded = value.encode("utf-8")[:maxlen]
-    return encoded.decode("utf-8", errors="ignore")
+    return value.strip()[:maxlen]
 
 
 def hash_password(p):
@@ -148,10 +165,12 @@ def apply():
         return redirect(url_for("index"))
     if request.method == "POST":
         mobile = request.form.get("mobile", "").strip()
-        if len(mobile) != 10 or not mobile.isdigit():
+        captcha = request.form.get("captcha", "").strip()
+        if (len(mobile) != 10 or not mobile.isdigit()
+                or captcha != str(session.get("captcha_answer", ""))):
             flash("Something went wrong. Please try again.")
             return render_template("apply.html", captcha_q=make_captcha())
-        code = str(random.randint(100000, 999999))
+        code = f"{secrets.randbelow(900000) + 100000:06d}"
         conn = get_db()
         cur = conn.cursor()
         cur.execute("INSERT INTO otps (mobile, code, created_at) VALUES (%s, %s, %s)",
@@ -161,6 +180,7 @@ def apply():
         send_sms(mobile, "Your Sewa Setu OTP is %s. Valid for 5 minutes." % code)
         session.permanent = True
         session["apply_mobile"] = mobile
+        session.pop("captcha_answer", None)
         return redirect(url_for("verify"))
     return render_template("apply.html", captcha_q=make_captcha())
 
@@ -223,18 +243,31 @@ def upload():
     if request.method == "POST":
         f = request.files.get("document")
         if f is None or f.filename == "":
-            flash("ERR_VAL_47")
+            flash("Please choose a PDF or JPG age-proof document.")
             return render_template("upload.html")
         filename = f.filename.lower()
-        content = f.read()
-        if not filename.endswith(".pdf"):
-            flash("ERR_VAL_47")
+        extension = os.path.splitext(filename)[1]
+        if extension not in (".pdf", ".jpg", ".jpeg"):
+            flash("Please choose a PDF or JPG age-proof document.")
             return render_template("upload.html")
-        if len(content) > 102400:
-            flash("ERR_VAL_47")
+        content = f.read(MAX_UPLOAD_BYTES + 1)
+        valid_content = (
+            extension == ".pdf" and content.startswith(b"%PDF-")
+        ) or (
+            extension in (".jpg", ".jpeg")
+            and content.startswith(b"\xff\xd8\xff")
+        )
+        if not valid_content:
+            flash("The selected file does not match its PDF or JPG format.")
+            return render_template("upload.html")
+        if len(content) > MAX_UPLOAD_BYTES:
+            flash("The document must be 5 MB or smaller.")
             return render_template("upload.html")
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        path = os.path.join(UPLOAD_DIR, "%s_%s" % (session["verified_mobile"], filename))
+        path = os.path.join(
+            UPLOAD_DIR,
+            f"{session['verified_mobile']}_{uuid.uuid4().hex}{extension}",
+        )
         with open(path, "wb") as out:
             out.write(content)
         session["doc_path"] = path
@@ -268,9 +301,31 @@ def handle_submission():
     ifsc = data.get("ifsc", "").strip().upper()
     dob_raw = data.get("dob", "").strip()
 
-    if not name or not village or not block or not bank_account or not dob_raw:
+    if not name or not dob_raw:
         flash("Something went wrong. Please try again.")
         return redirect(url_for("form_step", step=1))
+    if not village or not block:
+        flash("Please complete your village and block details.")
+        return redirect(url_for("form_step", step=2))
+    if not bank_account or not ifsc:
+        flash("Please complete your bank details.")
+        return redirect(url_for("form_step", step=3))
+
+    if gender not in ("Male", "Female", "Other"):
+        flash("Please select a valid gender.")
+        return redirect(url_for("form_step", step=1))
+    if marital not in ("Married", "Unmarried", "Widowed"):
+        flash("Please select a valid marital status.")
+        return redirect(url_for("form_step", step=1))
+    if block not in BLOCKS:
+        flash("Please select a valid block.")
+        return redirect(url_for("form_step", step=2))
+    if not bank_account.isdigit() or not 9 <= len(bank_account) <= 18:
+        flash("Enter a valid bank account number using 9 to 18 digits.")
+        return redirect(url_for("form_step", step=3))
+    if not re.fullmatch(r"[A-Z]{4}0[A-Z0-9]{6}", ifsc):
+        flash("Enter a valid 11-character IFSC code.")
+        return redirect(url_for("form_step", step=3))
 
     if marital == "Widowed":
         if not husband_name or not husband_employer:
@@ -291,7 +346,7 @@ def handle_submission():
     today = date.today()
     age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
     if age < MIN_AGE:
-        flash("Applicant must be above %d years of age to be eligible." % MIN_AGE)
+        flash("Applicant must be at least %d years of age to be eligible." % MIN_AGE)
         return redirect(url_for("form_step", step=1))
 
     if datetime.now() > SCHEME_DEADLINE:
@@ -363,13 +418,15 @@ def generate_acknowledgment(cur, app_id):
 
     labels = ["Application No", "Applicant Name", "Mobile", "Date of Birth",
               "Village", "Block", "Bank Account", "IFSC", "Submitted At", "Status"]
-    pdf.set_font("Helvetica", "", 10)
+    if os.path.isfile(PDF_UNICODE_FONT):
+        pdf.add_font("NotoDevanagari", "", PDF_UNICODE_FONT)
+        table_font = "NotoDevanagari"
+    else:
+        table_font = "Helvetica"
+    pdf.set_font(table_font, "", 10)
     for label, val in zip(labels, row):
-        try:
-            pdf.cell(60, 8, label, border=1)
-            pdf.cell(0, 8, str(val), border=1, ln=1)
-        except Exception:
-            pdf.cell(0, 8, "?", border=1, ln=1)
+        pdf.cell(60, 8, label, border=1)
+        pdf.cell(0, 8, str(val), border=1, ln=1)
     pdf.ln(6)
     pdf.set_font("Helvetica", "I", 9)
     pdf.multi_cell(0, 5, "This is a computer generated acknowledgment. Processing SLA "
@@ -392,6 +449,7 @@ def status_login():
         row = cur.fetchone()
         cur.close(); conn.close()
         if row and row[0] == hash_password(password):
+            session.clear()
             session["logged_in"] = True
             session["portal_mobile"] = mobile
             conn = get_db()
@@ -422,22 +480,79 @@ def view_application(app_id):
     cur.close(); conn.close()
     if not row:
         abort(404)
+    if session.get("admin") is not True and row[2] != session.get("portal_mobile"):
+        abort(404)
     return render_template("application.html", a=row, app_id=app_id)
+
+
+@app.route("/admin/application/<int:app_id>/document")
+def admin_document(app_id):
+    if session.get("admin") is not True:
+        abort(403)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT doc_path FROM applications WHERE id = %s", (app_id,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if not row or not row[0]:
+        abort(404)
+
+    upload_dir = os.path.realpath(UPLOAD_DIR)
+    document_path = os.path.realpath(row[0])
+    try:
+        if os.path.commonpath((upload_dir, document_path)) != upload_dir:
+            abort(404)
+    except ValueError:
+        abort(404)
+    if not os.path.isfile(document_path):
+        abort(404)
+    return send_file(
+        document_path,
+        as_attachment=True,
+        download_name=os.path.basename(document_path),
+    )
+
+
+@app.route("/health")
+def health():
+    try:
+        cur = get_db().cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+    except psycopg2.Error:
+        app.logger.exception("Portal database health check failed")
+        return jsonify(status="unavailable"), 503
+    return jsonify(status="ok")
+
+
+@app.route("/live")
+def live():
+    return jsonify(status="ok")
 
 
 @app.route("/ack/<int:app_id>.pdf")
 def ack_pdf(app_id):
+    if not session.get("logged_in") and session.get("admin") is not True:
+        abort(403)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT id, mobile FROM applications WHERE id = %s", (app_id,))
+    application = cur.fetchone()
+    if not application:
+        cur.close(); conn.close()
+        abort(404)
+    if (session.get("admin") is not True
+            and application[1] != session.get("portal_mobile")):
+        cur.close(); conn.close()
+        abort(404)
+
     path = os.path.join(UPLOAD_DIR, "ack", "%d.pdf" % app_id)
     if not os.path.exists(path):
-        conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT id FROM applications WHERE id = %s", (app_id,))
-        if not cur.fetchone():
-            cur.close(); conn.close()
-            abort(404)
         data = generate_acknowledgment(cur, app_id)
         cur.close(); conn.close()
         return send_file(io.BytesIO(data), mimetype="application/pdf")
+    cur.close(); conn.close()
     return send_file(path, mimetype="application/pdf")
 
 
@@ -472,10 +587,13 @@ def reset_password():
 @app.route("/admin", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
-        if (request.form.get("username") == ADMIN_USERNAME and
+        if (ADMIN_USERNAME and ADMIN_PASSWORD
+                and request.form.get("username") == ADMIN_USERNAME and
                 request.form.get("password") == ADMIN_PASSWORD):
+            session.clear()
             session["logged_in"] = True
             session["admin"] = True
+            session.pop("portal_mobile", None)
             return redirect(url_for("admin_dashboard"))
         flash("Invalid credentials.")
     return render_template("admin_login.html")
@@ -483,7 +601,7 @@ def admin_login():
 
 @app.route("/admin/dashboard")
 def admin_dashboard():
-    if not session.get("admin"):
+    if session.get("admin") is not True:
         return redirect(url_for("admin_login"))
     conn = get_db()
     cur = conn.cursor()
@@ -502,7 +620,7 @@ def admin_dashboard():
 
 @app.route("/admin/applications")
 def admin_list():
-    if not session.get("admin"):
+    if session.get("admin") is not True:
         return redirect(url_for("admin_login"))
     status = request.args.get("status", "PENDING")
     page = int(request.args.get("page", 1))
@@ -519,7 +637,7 @@ def admin_list():
 
 @app.route("/admin/application/<int:app_id>")
 def admin_view(app_id):
-    if not session.get("admin"):
+    if session.get("admin") is not True:
         return redirect(url_for("admin_login"))
     conn = get_db()
     cur = conn.cursor()

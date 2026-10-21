@@ -1,0 +1,21 @@
+[Unit]
+Description=Sewa Setu pension portal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sewasetu
+Group=sewasetu
+WorkingDirectory=/opt/sewasetu/app
+EnvironmentFile=/etc/sewasetu/sewasetu.env
+ExecStart=/opt/sewasetu/venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 30 app:app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/sewasetu/uploads /var/log/sewasetu
+
+[Install]
+WantedBy=multi-user.target

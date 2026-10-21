@@ -1,0 +1,13 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Fellowship source datasets are supplied separately and should not be copied
+# into a submission archive.
+seed/seed.sql
+logs/*.tar.gz

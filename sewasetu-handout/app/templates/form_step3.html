@@ -3,10 +3,11 @@
 <div class="steps"><b>Step 4 of 6:</b> Bank Details</div>
 <h2>Bank Details for Pension Disbursement</h2>
 <form method="post">
-  <label>Bank Account Number</label>
-  <input type="text" name="bank_account" value="{{ data.get('bank_account','') }}">
-  <label>IFSC Code</label>
-  <input type="text" name="ifsc" value="{{ data.get('ifsc','') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="bank_account">Bank Account Number</label>
+  <input id="bank_account" type="text" name="bank_account" inputmode="numeric" pattern="[0-9]{9,18}" maxlength="18" autocomplete="off" value="{{ data.get('bank_account','') }}" required>
+  <label for="ifsc">IFSC Code</label>
+  <input id="ifsc" type="text" name="ifsc" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" maxlength="11" autocapitalize="characters" value="{{ data.get('ifsc','') }}" required>
   <p class="note">Pension will be credited by DBT to this account. Ensure the account
   is in the name of the applicant.</p>
   <p><button class="btn" type="submit">Save &amp; Continue</button></p>

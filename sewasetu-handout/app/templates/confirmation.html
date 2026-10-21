@@ -6,7 +6,7 @@
   <tr><th>Application Number</th><td><b>{{ app_no }}</b></td></tr>
 </table>
 <p class="note">Please note down your Application Number. You can check your
-application status on the <a href="/status">status portal</a> using your mobile
+application status on the <a href="{{ url_for('status_login') }}">status portal</a> using your mobile
 number and password (your date of birth in DDMMYYYY format).</p>
-<p><a href="/ack/{{ app_id }}.pdf"><button class="btn">Download Acknowledgment (PDF)</button></a></p>
+<p><a class="btn" href="{{ url_for('ack_pdf', app_id=app_id) }}">Download Acknowledgment (PDF)</a></p>
 {% endblock %}

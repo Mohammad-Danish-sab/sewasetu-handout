@@ -2,10 +2,11 @@
 {% block content %}
 <h2>Departmental Login</h2>
 <form method="post">
-  <label>Username</label>
-  <input type="text" name="username">
-  <label>Password</label>
-  <input type="password" name="password">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="username">Username</label>
+  <input id="username" type="text" name="username" autocomplete="username" required>
+  <label for="password">Password</label>
+  <input id="password" type="password" name="password" autocomplete="current-password" required>
   <p><button class="btn" type="submit">Login</button></p>
 </form>
 {% endblock %}

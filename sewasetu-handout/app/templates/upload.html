@@ -5,8 +5,9 @@
 <p class="note">Accepted documents: Birth certificate, School leaving certificate,
 Voter ID. Accepted formats: <b>JPG or PDF, maximum size 5 MB</b>.</p>
 <form method="post" enctype="multipart/form-data">
-  <label>Select Document</label>
-  <input type="file" name="document">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label for="document">Select Document</label>
+  <input id="document" type="file" name="document" accept=".jpg,.jpeg,.pdf,image/jpeg,application/pdf" required>
   <p><button class="btn" type="submit">Upload &amp; Continue</button></p>
 </form>
 {% endblock %}

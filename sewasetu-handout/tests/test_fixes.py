@@ -1,9 +1,17 @@
+import os
+from io import BytesIO
 from datetime import date, datetime
 
 import pytest
 from fpdf import FPDF
+
+os.environ.setdefault("SEWASETU_SECRET_KEY", "test-secret-key-keep-this-out-of-production")
+os.environ.setdefault("SEWASETU_ADMIN_USERNAME", "test-admin")
+os.environ.setdefault("SEWASETU_ADMIN_PASSWORD", "test-password-keep-this-out-of-production")
+
 from app import app as app_module
-from app.app import app, get_db, hash_password
+from app.db import connect_db
+from app.app import app, get_db, hash_password, sanitize
 
 @pytest.fixture
 def client():
@@ -11,6 +19,41 @@ def client():
     app.config["WTF_CSRF_ENABLED"] = False
     with app.test_client() as client:
         yield client
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/",
+        "/about",
+        "/apply",
+        "/status",
+        "/status/reset",
+        "/admin",
+        "/live",
+    ],
+)
+def test_public_pages_render(client, path, monkeypatch):
+    monkeypatch.setattr(app_module, "deadline_remaining", lambda: 10)
+    assert client.get(path).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/form/1",
+        "/form/2",
+        "/form/3",
+        "/upload",
+        "/declaration",
+    ],
+)
+def test_application_steps_render_for_verified_applicant(client, path):
+    with client.session_transaction() as sess:
+        sess["verified_mobile"] = "9876543210"
+
+    assert client.get(path).status_code == 200
+
 
 @pytest.mark.parametrize("endpoint", ["/admin/approve/1", "/admin/reject/1"])
 @pytest.mark.parametrize("admin_value", [False, None, 1, "true"])
@@ -24,6 +67,15 @@ def test_admin_authorization_enforced(client, endpoint, admin_value):
 
     response = client.post(endpoint)
     assert response.status_code == 403
+
+
+def test_state_changing_admin_request_requires_csrf_token(client, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+
+    response = client.post("/admin/approve/1")
+
+    assert response.status_code == 400
+
 
 def test_password_reset_uses_parameterized_mobile_lookup(client, monkeypatch):
     """Treat an injection-shaped mobile value as data in the reset lookup."""
@@ -99,8 +151,180 @@ def test_password_reset_parameterizes_account_lookup_and_update(client, monkeypa
     ]
     assert connection_state["committed"]
 
+
+def test_apply_requires_captcha_answer(client, monkeypatch):
+    monkeypatch.setattr(app_module, "deadline_remaining", lambda: 10)
+    with client.session_transaction() as sess:
+        sess["captcha_answer"] = 5
+
+    response = client.post("/apply", data={"mobile": "9876543210", "captcha": "4"})
+
+    assert response.status_code == 200
+    assert b"Security Check" in response.data
+    with client.session_transaction() as sess:
+        assert "apply_mobile" not in sess
+
+
+def test_uploaded_document_format_size_and_filename_are_safe(
+    client, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    with client.session_transaction() as sess:
+        sess["verified_mobile"] = "9876543210"
+
+    response = client.post(
+        "/upload",
+        data={"document": (BytesIO(b"%PDF-1.4\nvalid test document"), "../../outside.pdf")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 302
+    saved_files = list(tmp_path.iterdir())
+    assert len(saved_files) == 1
+    assert saved_files[0].name.startswith("9876543210_")
+    assert saved_files[0].suffix == ".pdf"
+    assert saved_files[0].read_bytes().startswith(b"%PDF-")
+
+
+def test_upload_rejects_mismatched_content(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    with client.session_transaction() as sess:
+        sess["verified_mobile"] = "9876543210"
+
+    response = client.post(
+        "/upload",
+        data={"document": (BytesIO(b"not a pdf"), "proof.pdf")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert b"does not match" in response.data
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_sanitize_preserves_unicode_and_uses_character_limit():
+    assert sanitize("शारदा देवी", maxlen=100) == "शारदा देवी"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_step"),
+    [
+        ("block", "Not a district block", 2),
+        ("ifsc", "invalid", 3),
+        ("bank_account", "12x", 3),
+    ],
+)
+def test_submission_validates_address_and_bank_fields(
+    client, field, value, expected_step
+):
+    form_data = {
+        "applicant_name": "Asha Devi",
+        "dob": "02/01/1940",
+        "gender": "Female",
+        "marital_status": "Married",
+        "village": "Sonapur",
+        "block": "Sonari",
+        "bank_account": "1234567890",
+        "ifsc": "ABCD0123456",
+    }
+    form_data[field] = value
+    with client.session_transaction() as sess:
+        sess["verified_mobile"] = "9876543210"
+        sess["form_data"] = form_data
+
+    response = client.post("/declaration")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/form/{expected_step}")
+
+
+def test_application_is_not_visible_to_another_logged_in_citizen(
+    client, monkeypatch
+):
+    application = (
+        "SSP26123456",
+        "Asha Devi",
+        "9876543210",
+        date(1940, 1, 2),
+        "Sonapur",
+        "Sonari",
+        "1234567890",
+        "ABCD0123456",
+        "PENDING",
+        datetime(2026, 1, 1, 12, 0),
+        None,
+    )
+
+    class Cursor:
+        def execute(self, *_):
+            pass
+
+        def fetchone(self):
+            return application
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app_module, "get_db", lambda: Connection())
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["portal_mobile"] = "9876543211"
+
+    response = client.get("/application/42")
+
+    assert response.status_code == 404
+
+
+def test_acknowledgment_pdf_requires_login(client):
+    assert client.get("/ack/42.pdf").status_code == 403
+
+
+def test_admin_document_download_is_authorized_and_confined(
+    client, monkeypatch, tmp_path
+):
+    document = tmp_path / "age-proof.pdf"
+    document.write_bytes(b"%PDF-1.4\nage proof")
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+
+    class Cursor:
+        def execute(self, *_):
+            pass
+
+        def fetchone(self):
+            return (str(document),)
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app_module, "get_db", lambda: Connection())
+    assert client.get("/admin/application/42/document").status_code == 403
+
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+    response = client.get("/admin/application/42/document")
+
+    assert response.status_code == 200
+    assert response.data == b"%PDF-1.4\nage proof"
+    assert "attachment" in response.headers["Content-Disposition"]
+
+
 def test_database_connection_is_reused_and_closed_at_request_teardown(monkeypatch):
     connections = []
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-local-db-password")
 
     class Connection:
         closed = False
@@ -123,6 +347,7 @@ def test_database_connection_is_reused_and_closed_at_request_teardown(monkeypatc
 
 def test_database_connection_reopens_after_explicit_close(monkeypatch):
     connections = []
+    monkeypatch.setenv("POSTGRES_PASSWORD", "test-local-db-password")
 
     class Connection:
         closed = False
@@ -144,6 +369,58 @@ def test_database_connection_reopens_after_explicit_close(monkeypatch):
 
     assert len(connections) == 2
     assert all(connection.closed for connection in connections)
+
+
+def test_database_connection_uses_neon_url_with_tls(monkeypatch):
+    options = {}
+
+    def connect(**kwargs):
+        options.update(kwargs)
+        return object()
+
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://neon_user:test-only-password@db.example.test/neondb",
+    )
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.setattr("app.db.psycopg2.connect", connect)
+
+    connection = connect_db()
+
+    assert connection is not None
+    assert options["host"] == "db.example.test"
+    assert options["dbname"] == "neondb"
+    assert options["sslmode"] == "require"
+    assert options["connect_timeout"] == "10"
+
+
+def test_database_connection_accepts_postgres_url_alias(monkeypatch):
+    options = {}
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "POSTGRES_URL",
+        "postgresql://neon_user:test-only-password@db.example.test/neondb?sslmode=verify-full",
+    )
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+    monkeypatch.setattr(
+        "app.db.psycopg2.connect",
+        lambda **kwargs: options.update(kwargs) or object(),
+    )
+
+    connect_db()
+
+    assert options["sslmode"] == "verify-full"
+
+
+def test_database_connection_requires_credentials(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_URL", raising=False)
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
+
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        connect_db()
+
 
 def test_acknowledgment_pdf_executes_with_bounded_rendering(
     client, monkeypatch, tmp_path
@@ -169,7 +446,7 @@ def test_acknowledgment_pdf_executes_with_bounded_rendering(
             executed.append((query, params))
 
         def fetchone(self):
-            return (app_id,) if len(executed) == 1 else application
+            return (app_id, "9876543210") if len(executed) == 1 else application
 
         def close(self):
             pass
@@ -205,6 +482,9 @@ def test_acknowledgment_pdf_executes_with_bounded_rendering(
     monkeypatch.setattr(app_module, "get_db", lambda: Connection())
     monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
     monkeypatch.setattr(app_module, "FPDF", make_pdf)
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["portal_mobile"] = "9876543210"
 
     response = client.get(f"/ack/{app_id}.pdf")
 

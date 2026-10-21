@@ -1,33 +1,64 @@
 services:
   db:
     image: postgres:15
+    profiles: ["local"]
     environment:
       POSTGRES_DB: sewasetu
       POSTGRES_USER: sewasetu
-      POSTGRES_PASSWORD: sewasetu123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./app/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
       - ./seed/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sewasetu -d sewasetu"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
 
   app:
     build: ./app
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_URL: ${POSTGRES_URL:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      SEWASETU_SECRET_KEY: ${SEWASETU_SECRET_KEY:?Set SEWASETU_SECRET_KEY in .env}
+      SEWASETU_ADMIN_USERNAME: ${SEWASETU_ADMIN_USERNAME:?Set SEWASETU_ADMIN_USERNAME in .env}
+      SEWASETU_ADMIN_PASSWORD: ${SEWASETU_ADMIN_PASSWORD:?Set SEWASETU_ADMIN_PASSWORD in .env}
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - smsgw
+      db:
+        condition: service_healthy
+        required: false
+      smsgw:
+        condition: service_started
     volumes:
       - uploads:/var/sewasetu/uploads
       - applogs:/var/log/sewasetu
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8000/live', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
   scheduler:
     build: ./app
     command: ["cron", "-f"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+      POSTGRES_URL: ${POSTGRES_URL:-}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
     volumes:
       - applogs:/var/log/sewasetu
+    restart: unless-stopped
 
   smsgw:
     build: ./smsgw
@@ -35,6 +66,12 @@ services:
     # users via the app at /__gateway/ (so no second host port is needed)
     expose:
       - "8025"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8025/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 volumes:
   pgdata:

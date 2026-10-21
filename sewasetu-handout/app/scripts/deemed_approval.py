@@ -15,10 +15,12 @@ import logging
 import configparser
 from datetime import datetime, timedelta
 
-import psycopg2
 import requests
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
+
+from db import connect_db
 
 LOG_DIR = "/var/log/sewasetu"
 logger = logging.getLogger("sewasetu.scheduler")
@@ -58,13 +60,7 @@ SMS_GATEWAY_URL = config.get("app", "sms_gateway_url")
 def main():
     configure_logging()
     try:
-        conn = psycopg2.connect(
-            host=config.get("database", "host"),
-            port=config.get("database", "port"),
-            dbname=config.get("database", "name"),
-            user=config.get("database", "user"),
-            password=config.get("database", "password"),
-        )
+        conn = connect_db()
     except Exception:
         logger.exception("Database connection failed")
         return 1
