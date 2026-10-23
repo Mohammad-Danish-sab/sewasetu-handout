@@ -1,25 +1,66 @@
 {% extends "base.html" %}
+{% block body_class %}home-page{% endblock %}
 {% block content %}
-<h2>Welcome</h2>
-<p>The Old Age Pension Scheme provides a monthly pension of Rs. 250 to eligible
-senior citizens aged 60 years or older who are residents of Purvanchal.</p>
-{% if hours_left is not none %}
-<p><b>Application window closes in approximately {{ hours_left }} hours</b>
-(midnight, 31 October).</p>
-{% else %}
-<p><b>The application window for this scheme has closed.</b></p>
-{% endif %}
-<p>
-  <a class="btn" href="{{ url_for('apply') }}">Apply for Pension</a>
-  &nbsp;
-  <a class="btn" style="background:#555" href="{{ url_for('status_login') }}">Check Application Status</a>
-</p>
-<h3>How to apply</h3>
-<ol class="note">
-  <li>Verify your mobile number with OTP.</li>
-  <li>Fill the application form (personal details, address, bank details).</li>
-  <li>Upload your age proof document (JPG or PDF, maximum 5 MB).</li>
-  <li>Submit the declaration. Note down your Application Number.</li>
-</ol>
-<p class="note">For assistance visit your nearest Block Development Office.</p>
+<section class="home-hero" aria-labelledby="welcome-heading">
+  <div class="hero-copy">
+    <div class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span> SUPPORT WITH DIGNITY, EVERY STEP OF THE WAY</div>
+    <h2 id="welcome-heading" class="hero-title">A little support.<br><span>A lot of peace.</span></h2>
+    <p class="hero-lead">The Old Age Pension Scheme offers eligible residents of Purvanchal aged 60 and above a monthly pension of Rs. 250.</p>
+    {% if hours_left is not none %}
+    <p class="hero-note"><strong>Applications close in approximately {{ hours_left }} hours</strong> (midnight, 31 October).</p>
+    {% else %}
+    <p class="hero-note"><strong>The application window for this scheme has closed.</strong></p>
+    {% endif %}
+    <div class="hero-actions">
+      <a class="btn" href="{{ url_for('apply') }}">Apply for pension <span aria-hidden="true">&nbsp;&rarr;</span></a>
+      <a class="btn btn-secondary" href="{{ url_for('status_login') }}">Check application status</a>
+    </div>
+    <p class="hero-note">Need help in person? Visit your nearest Block Development Office.</p>
+  </div>
+  <div class="hero-visual">
+    <img src="{{ url_for('static', filename='images/senior-couple.svg') }}" alt="Illustration of an older man and woman smiling together">
+    <div class="impact-badge"><strong>Here for you</strong>Clear steps, secure applications, and support when you need it.</div>
+  </div>
+</section>
+
+<section class="home-section" aria-labelledby="eligibility-heading">
+  <h2 id="eligibility-heading" class="section-heading">A simple scheme. A straightforward application.</h2>
+  <p class="section-intro">See what the scheme offers and what to have ready before you begin.</p>
+  <div class="info-grid">
+    <article class="info-card">
+      <div class="info-icon" aria-hidden="true">60+</div>
+      <h3>Who can apply?</h3>
+      <p>Residents of Purvanchal who are 60 years of age or older.</p>
+    </article>
+    <article class="info-card">
+      <div class="info-icon" aria-hidden="true">&#8377;</div>
+      <h3>Monthly pension</h3>
+      <p>Eligible beneficiaries receive Rs. 250 per month under the scheme.</p>
+    </article>
+    <article class="info-card">
+      <div class="info-icon" aria-hidden="true">&#10003;</div>
+      <h3>Keep age proof ready</h3>
+      <p>You will need an age-proof document to complete your application. JPG or PDF files up to 5 MB are accepted.</p>
+    </article>
+  </div>
+</section>
+
+<section class="home-section" aria-labelledby="steps-heading">
+  <h2 id="steps-heading" class="section-heading">How to apply</h2>
+  <p class="section-intro">Complete the steps online, then save your application number for later.</p>
+  <div class="process-list">
+    <div class="process-item"><strong>Verify your mobile</strong><span>Confirm your number with a one-time password.</span></div>
+    <div class="process-item"><strong>Share your details</strong><span>Enter your personal, address, and bank information.</span></div>
+    <div class="process-item"><strong>Upload age proof</strong><span>Add a JPG or PDF document (maximum 5 MB).</span></div>
+    <div class="process-item"><strong>Submit &amp; save</strong><span>Complete the declaration and keep your application number.</span></div>
+  </div>
+</section>
+
+<aside class="help-strip">
+  <div>
+    <h3>Prefer help in person?</h3>
+    <p>Your nearest Block Development Office can help you with the application.</p>
+  </div>
+  <a class="btn btn-secondary" href="{{ url_for('about') }}">Read scheme information</a>
+</aside>
 {% endblock %}
