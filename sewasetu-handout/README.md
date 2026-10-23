@@ -49,6 +49,27 @@ private. Docker checks `/live` without connecting to Neon, so routine container
 health checks do not keep a scale-to-zero Neon compute awake. Use `/health`
 when you want to check database readiness.
 
+## Optional AI assistant
+
+The portal includes an English-language assistant for general pension-scheme
+and application-process questions. It uses an OpenAI-compatible chat-completions
+endpoint and is disabled until configured. Add the provider's HTTPS endpoint,
+API key, and model to `.env`:
+
+```dotenv
+SEWASETU_AI_API_URL=https://your-provider.example/v1/chat/completions
+SEWASETU_AI_API_KEY=your-private-provider-key
+SEWASETU_AI_MODEL=your-model-name
+```
+
+Use the endpoint, key, and model values supplied by your AI provider. Never
+commit or share the API key. Rebuild/restart the app after changing `.env`:
+`docker compose up --build -d`. User questions are sent to that provider to
+generate answers; do not enter personal details, OTPs, passwords, or bank
+information. The assistant cannot access applications or make official
+eligibility decisions, and it directs questions outside the published scheme
+guidance to the nearest Block Development Office.
+
 ## Optional local PostgreSQL
 
 To use the bundled local database, leave both URL variables blank in `.env`,

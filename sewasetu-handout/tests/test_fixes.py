@@ -38,6 +38,95 @@ def test_public_pages_render(client, path, monkeypatch):
     assert client.get(path).status_code == 200
 
 
+def test_chatbot_requires_provider_configuration(client, monkeypatch):
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_URL", "")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "")
+
+    response = client.post("/api/chatbot", json={"message": "Who can apply?"})
+
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "The AI assistant is not configured yet."
+
+
+def test_chatbot_uses_configured_provider_and_returns_reply(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module, "AI_CHATBOT_API_URL",
+        "https://ai.example.test/v1/chat/completions",
+    )
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "test-provider-key")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "test-model")
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Residents aged 60 or older may apply."}}]}
+
+    def fake_post(url, **kwargs):
+        calls.append((url, kwargs))
+        return Response()
+
+    monkeypatch.setattr(app_module.requests, "post", fake_post)
+
+    response = client.post("/api/chatbot", json={"message": "Who can apply?"})
+
+    assert response.status_code == 200
+    assert response.get_json()["reply"] == "Residents aged 60 or older may apply."
+    assert calls[0][0] == "https://ai.example.test/v1/chat/completions"
+    assert calls[0][1]["headers"]["Authorization"] == "Bearer test-provider-key"
+    assert calls[0][1]["json"]["model"] == "test-model"
+    assert calls[0][1]["json"]["messages"][-1] == {
+        "role": "user",
+        "content": "Who can apply?",
+    }
+    assert calls[0][1]["timeout"] == (5, 45)
+
+
+def test_chatbot_rejects_invalid_questions_without_calling_provider(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module, "AI_CHATBOT_API_URL",
+        "https://ai.example.test/v1/chat/completions",
+    )
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "test-provider-key")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "test-model")
+
+    def fail_if_called(*args, **kwargs):
+        pytest.fail("Provider must not be called for an invalid question.")
+
+    monkeypatch.setattr(app_module.requests, "post", fail_if_called)
+
+    too_long = client.post("/api/chatbot", json={"message": "x" * 1001})
+    empty = client.post("/api/chatbot", json={"message": "  "})
+
+    assert too_long.status_code == 400
+    assert empty.status_code == 400
+
+
+def test_chatbot_does_not_send_api_key_over_plain_http(client, monkeypatch):
+    monkeypatch.setattr(
+        app_module, "AI_CHATBOT_API_URL",
+        "http://ai.example.test/v1/chat/completions",
+    )
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "test-provider-key")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "test-model")
+
+    response = client.post("/api/chatbot", json={"message": "Who can apply?"})
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.get_json()["error"]
+
+
+def test_chatbot_post_requires_csrf_token(client, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+
+    response = client.post("/api/chatbot", json={"message": "Who can apply?"})
+
+    assert response.status_code == 400
+
+
 @pytest.mark.parametrize(
     "path",
     [

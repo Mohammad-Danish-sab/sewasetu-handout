@@ -75,8 +75,33 @@ table.tbl th{background:#eff4ef}
 .help-strip{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-top:22px;padding:22px 25px;border-radius:15px;background:#eaf2e8}
 .help-strip h3{margin:0 0 3px;color:#224b3b;font-size:17px}
 .help-strip p{margin:0;color:#596f60;font-size:13px}
+.chat-launcher{position:fixed;right:22px;bottom:22px;z-index:20;display:flex;align-items:center;gap:9px;min-height:54px;padding:10px 17px;border:0;border-radius:99px;background:#124c43;color:#fff;box-shadow:0 8px 24px rgba(18,76,67,.25);font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.chat-launcher:hover{background:#1b6558}
+.chat-launcher-icon{display:grid;place-items:center;width:29px;height:29px;border-radius:50%;background:#fff;color:#124c43;font-size:16px}
+.chat-panel{position:fixed;right:22px;bottom:88px;z-index:21;display:flex;flex-direction:column;width:min(370px,calc(100vw - 28px));max-height:min(560px,calc(100vh - 120px));overflow:hidden;border:1px solid #dce6dd;border-radius:17px;background:#fff;box-shadow:0 16px 48px rgba(20,48,37,.2)}
+.chat-panel[hidden]{display:none}
+.chat-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#124c43;color:#fff}
+.chat-head strong{display:block;font-size:15px}
+.chat-head span{display:block;color:#d5e8df;font-size:12px}
+.chat-close{width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:#fff;font-size:22px;cursor:pointer}
+.chat-close:hover{background:rgba(255,255,255,.14)}
+.chat-disclaimer{margin:0;padding:10px 14px;background:#f7f8f3;color:#61736a;font-size:11px;line-height:1.5}
+.chat-log{display:flex;flex:1;flex-direction:column;gap:10px;min-height:110px;overflow-y:auto;padding:14px}
+.chat-bubble{max-width:90%;padding:10px 12px;border-radius:13px;background:#eff4ef;color:#304a3d;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.chat-bubble.user{align-self:flex-end;background:#176657;color:#fff}
+.chat-bubble.error{background:#fff2e8;color:#713f20}
+.chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
+.chat-suggestions button{border:1px solid #cfdfd3;border-radius:99px;background:#fff;color:#28604e;padding:6px 9px;font:inherit;font-size:11px;cursor:pointer}
+.chat-suggestions button:hover{background:#edf5ee}
+.chat-form{display:flex;gap:8px;padding:12px;border-top:1px solid #e7ece5}
+.chat-form input{min-width:0;flex:1;max-width:none;min-height:42px;padding:8px 10px;border:1px solid #b9c8bf;border-radius:8px;font:inherit;font-size:13px}
+.chat-send{width:42px;flex:0 0 42px;border:0;border-radius:9px;background:#176657;color:#fff;font-size:18px;cursor:pointer}
+.chat-send:disabled{opacity:.6;cursor:wait}
+.chat-unavailable{padding:16px;color:#5e6f63;font-size:13px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.home-hero{grid-template-columns:1fr;padding:28px}.hero-visual{max-width:500px;margin:-4px auto -10px}.hero-title{font-size:clamp(36px,9vw,52px)}.info-grid{grid-template-columns:1fr}.process-list{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.header{padding:14px 16px}.brand-mark{width:40px;height:40px;flex-basis:40px}.site-nav{gap:3px;padding:8px 12px}.site-nav a{padding:7px 9px;font-size:13px}.site-nav a.nav-primary{margin-left:0}.container{width:100%;margin:0 auto 18px;border-radius:0;border-left:0;border-right:0}.home-page .container{width:100%;margin:16px auto 26px;padding:0 12px}.home-hero{gap:5px;padding:25px 21px;border-radius:17px}.hero-lead{font-size:15px}.hero-actions .btn{flex:1}.impact-badge{right:-3px;bottom:5%;max-width:155px;padding:9px 11px;font-size:11px}.home-section{margin-top:15px;padding:22px 18px}.process-list{gap:9px}.process-item{padding:13px 11px}.help-strip{align-items:flex-start;flex-direction:column;padding:19px}.tbl{display:block;overflow-x:auto;white-space:nowrap}.footer{margin-top:22px}}
+@media(max-width:640px){.chat-launcher{right:14px;bottom:14px}.chat-panel{right:14px;bottom:78px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
 </style>
 </head>
@@ -110,5 +135,111 @@ table.tbl th{background:#eff4ef}
   <a href="{{ url_for('status_login') }}">Application status</a><br>
   Department of Social Welfare &middot; Government of Purvanchal
 </div>
+<button class="chat-launcher" id="chat-launcher" type="button" aria-expanded="false" aria-controls="chat-panel">
+  <span class="chat-launcher-icon" aria-hidden="true">&#10024;</span> Ask Sewa Setu
+</button>
+<section class="chat-panel" id="chat-panel" role="dialog" aria-label="Sewa Setu AI assistant" hidden>
+  <div class="chat-head">
+    <div><strong>Sewa Setu Assistant</strong><span>Scheme and application help</span></div>
+    <button class="chat-close" id="chat-close" type="button" aria-label="Close assistant">&times;</button>
+  </div>
+  <p class="chat-disclaimer">AI answers can be wrong and are not official decisions. Do not share personal details, OTPs, passwords, or bank information. Questions are sent to the configured AI provider.</p>
+  {% if chatbot_enabled %}
+  <div class="chat-log" id="chat-log" aria-live="polite" aria-relevant="additions text">
+    <div class="chat-bubble">Hello! I can help with general questions about the pension scheme and how to apply.</div>
+  </div>
+  <div class="chat-suggestions" aria-label="Suggested questions">
+    <button type="button" data-chat-question="Who can apply for the pension?">Who can apply?</button>
+    <button type="button" data-chat-question="What documents do I need?">Documents needed?</button>
+    <button type="button" data-chat-question="How do I apply?">How to apply?</button>
+  </div>
+  <form class="chat-form" id="chat-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="sr-only" for="chat-message">Ask a question</label>
+    <input id="chat-message" name="message" type="text" maxlength="1000" placeholder="Ask a scheme question..." autocomplete="off" required>
+    <button class="chat-send" type="submit" aria-label="Send question">&#10148;</button>
+  </form>
+  {% else %}
+  <div class="chat-unavailable">The assistant needs an AI provider configuration before it can answer. Add the chatbot settings to your private <code>.env</code> file and restart the app.</div>
+  {% endif %}
+</section>
+<script>
+(() => {
+  const launcher = document.getElementById("chat-launcher");
+  const panel = document.getElementById("chat-panel");
+  const close = document.getElementById("chat-close");
+  if (!launcher || !panel || !close) return;
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    launcher.setAttribute("aria-expanded", String(open));
+    if (open) {
+      const input = document.getElementById("chat-message");
+      if (input) input.focus();
+    } else {
+      launcher.focus();
+    }
+  };
+  launcher.addEventListener("click", () => setOpen(panel.hidden));
+  close.addEventListener("click", () => setOpen(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panel.hidden) setOpen(false);
+  });
+
+  const form = document.getElementById("chat-form");
+  const log = document.getElementById("chat-log");
+  const input = document.getElementById("chat-message");
+  if (!form || !log || !input) return;
+
+  const appendMessage = (text, kind) => {
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble" + (kind ? " " + kind : "");
+    bubble.textContent = text;
+    log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+  };
+  const sendQuestion = async (question) => {
+    if (!question || question.length > 1000) return;
+    appendMessage(question, "user");
+    const pending = document.createElement("div");
+    pending.className = "chat-bubble";
+    pending.textContent = "Checking the scheme information...";
+    log.appendChild(pending);
+    log.scrollTop = log.scrollHeight;
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    input.disabled = true;
+    try {
+      const response = await fetch("{{ url_for('chatbot') }}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": form.elements.csrf_token.value
+        },
+        body: JSON.stringify({message: question})
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "The assistant couldn't respond just now.");
+      pending.remove();
+      appendMessage(result.reply, "");
+    } catch (error) {
+      pending.remove();
+      appendMessage(error.message || "The assistant couldn't respond just now. Please try again later.", "error");
+    } finally {
+      button.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  };
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const question = input.value.trim();
+    input.value = "";
+    sendQuestion(question);
+  });
+  document.querySelectorAll("[data-chat-question]").forEach((button) => {
+    button.addEventListener("click", () => sendQuestion(button.dataset.chatQuestion));
+  });
+})();
+</script>
 </body>
 </html>
