@@ -35,3 +35,16 @@ CREATE TABLE IF NOT EXISTS otps (
     code       VARCHAR(6),
     created_at TIMESTAMP
 );
+
+-- Provider-approved pseudonymous subject reference only; never store Aadhaar
+-- numbers, OTPs, or authentication payloads here.
+CREATE TABLE IF NOT EXISTS identity_verifications (
+    id                 SERIAL PRIMARY KEY,
+    application_id     INTEGER NOT NULL UNIQUE
+                       REFERENCES applications(id) ON DELETE RESTRICT,
+    provider_name      VARCHAR(100) NOT NULL,
+    subject_reference  VARCHAR(255) NOT NULL,
+    verified_at        TIMESTAMP NOT NULL,
+    CONSTRAINT identity_verifications_provider_subject_unique
+        UNIQUE (provider_name, subject_reference)
+);

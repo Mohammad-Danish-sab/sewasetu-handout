@@ -10,5 +10,5 @@
   <input id="captcha" type="text" name="captcha" inputmode="numeric" style="max-width:160px" required>
   <p><button class="btn" type="submit">Send OTP</button></p>
 </form>
-<p class="note">An OTP will be sent to your mobile number by SMS. OTP is valid for 5 minutes.</p>
+<p class="note">The OTP is valid for 5 minutes. This demo uses a simulated SMS gateway and does not send texts to real phones. For testing, use a test number and check the <a href="{{ url_for('gateway_proxy') }}">SMS gateway console</a>.</p>
 {% endblock %}

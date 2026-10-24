@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from io import BytesIO
 from datetime import date, datetime
 
@@ -36,6 +37,19 @@ def client():
 def test_public_pages_render(client, path, monkeypatch):
     monkeypatch.setattr(app_module, "deadline_remaining", lambda: 10)
     assert client.get(path).status_code == 200
+
+
+def test_otp_pages_explain_simulated_sms_delivery(client, monkeypatch):
+    monkeypatch.setattr(app_module, "deadline_remaining", lambda: 10)
+    apply_response = client.get("/apply")
+    with client.session_transaction() as sess:
+        sess["apply_mobile"] = "9999999999"
+    verify_response = client.get("/verify")
+
+    assert b"simulated SMS gateway" in apply_response.data
+    assert b"SMS gateway console" in apply_response.data
+    assert b"does not send texts to real phones" in verify_response.data
+    assert b"SMS gateway console" in verify_response.data
 
 
 def test_chatbot_requires_provider_configuration(client, monkeypatch):
@@ -125,6 +139,25 @@ def test_chatbot_post_requires_csrf_token(client, monkeypatch):
     response = client.post("/api/chatbot", json={"message": "Who can apply?"})
 
     assert response.status_code == 400
+
+
+def test_identity_scaffold_stores_only_provider_reference_and_links_uniquely():
+    schema = (
+        Path(__file__).resolve().parents[1] / "app" / "schema.sql"
+    ).read_text(encoding="utf-8").lower()
+
+    identity_schema = schema.split(
+        "create table if not exists identity_verifications", 1
+    )[1]
+
+    assert "application_id" in identity_schema
+    assert "provider_name" in identity_schema
+    assert "subject_reference" in identity_schema
+    assert "verified_at" in identity_schema
+    assert "unique (provider_name, subject_reference)" in identity_schema
+    assert "aadhar_number" not in identity_schema
+    assert "aadhaar_number" not in identity_schema
+    assert "otp" not in identity_schema
 
 
 @pytest.mark.parametrize(

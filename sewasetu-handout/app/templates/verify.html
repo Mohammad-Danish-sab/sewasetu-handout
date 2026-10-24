@@ -2,7 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 1 of 6:</b> Mobile Verification</div>
 <h2>Enter OTP</h2>
-<p class="note">An OTP has been sent to {{ mobile }}.</p>
+<p class="note">This demo does not send texts to real phones. For testing, use the OTP shown in the <a href="{{ url_for('gateway_proxy') }}">SMS gateway console</a>. The OTP is valid for 5 minutes.</p>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>OTP</label>

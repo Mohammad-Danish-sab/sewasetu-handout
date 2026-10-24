@@ -49,6 +49,23 @@ private. Docker checks `/live` without connecting to Neon, so routine container
 health checks do not keep a scale-to-zero Neon compute awake. Use `/health`
 when you want to check database readiness.
 
+## Aadhaar identity integration scaffold (disabled)
+
+The portal does not currently collect or verify Aadhaar. The database schema
+includes an inactive `identity_verifications` table for a future integration
+with an authorized provider. It is designed to hold only the provider name, a
+provider-approved pseudonymous subject reference, the linked application, and
+the verification timestamp. A reference can be linked to only one application,
+and a provider reference cannot be reused for another application.
+
+Do not add Aadhaar numbers, Aadhaar OTPs, or provider authentication payloads
+to the application or database. Real verification and duplicate blocking must
+not be enabled until the authorized provider, official sandbox documentation,
+and provider-approved duplicate-check reference are confirmed. The existing
+mobile-OTP flow remains unchanged and is not Aadhaar verification. Applying
+`app/scripts/init_database.py` creates the new table without modifying citizen
+records.
+
 ## Optional AI assistant
 
 The portal includes an English-language assistant for general pension-scheme
