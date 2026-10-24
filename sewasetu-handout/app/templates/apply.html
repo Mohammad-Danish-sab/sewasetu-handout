@@ -2,6 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 1 of 6:</b> Mobile Verification &rsaquo; Personal Details &rsaquo; Address &rsaquo; Bank Details &rsaquo; Document Upload &rsaquo; Declaration</div>
 <h2>Mobile Verification</h2>
+{% if chatbot_enabled %}<p class="note">For general application guidance, ask the assistant. Do not share your mobile number or OTP in chat.</p><p><button class="btn btn-secondary" type="button" data-chat-question="How does mobile verification work on this application? Do not ask me for my phone number or OTP.">Get mobile-verification help</button></p>{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="mobile">Mobile Number</label>

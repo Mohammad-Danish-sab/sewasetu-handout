@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Application Status</h2>
+<section class="home-section" aria-labelledby="status-guidance-heading">
+  <h3 id="status-guidance-heading">Status guidance</h3>
+  <p>{{ status_guidance }}</p>
+  <p class="note">This explanation uses the status shown below. It does not change
+  your status or replace an official decision.</p>
+</section>
 <table class="tbl" style="max-width:640px">
   <tr><th>Application No</th><td>{{ a[0] }}</td></tr>
   <tr><th>Applicant Name</th><td>{{ a[1] }}</td></tr>

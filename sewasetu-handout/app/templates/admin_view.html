@@ -17,6 +17,14 @@
   <tr><th>Submitted</th><td>{{ a[12] }}</td></tr>
   <tr><th>Decided</th><td>{{ a[13] or '-' }} {{ a[14] or '' }}</td></tr>
 </table>
+<section class="home-section" aria-labelledby="review-assistance-heading">
+  <h3 id="review-assistance-heading">Local review assistance</h3>
+  <p><b>Application:</b> {{ review_assistance.application_no }} ·
+  <b>Current status:</b> {{ review_assistance.status }}</p>
+  <ul>{% for check in review_assistance.checks %}<li>{{ check }}</li>{% endfor %}</ul>
+  <p class="note">{{ review_assistance.notice }} No application fields or documents
+  are sent to the external language model.</p>
+</section>
 {% if a[11] == 'PENDING' %}
 <p>
 <form method="post" action="/admin/approve/{{ app_id }}" style="display:inline">

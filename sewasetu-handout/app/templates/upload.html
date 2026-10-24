@@ -2,6 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 5 of 6:</b> Document Upload</div>
 <h2>Upload Age Proof Document</h2>
+{% if chatbot_enabled %}<p><button class="btn btn-secondary" type="button" data-chat-question="Which age-proof documents and file formats does the portal accept? Do not ask me to upload or share a document in chat.">Ask about accepted documents</button></p>{% endif %}
 <p class="note">Accepted documents: Birth certificate, School leaving certificate,
 Voter ID. Accepted formats: <b>JPG or PDF, maximum size 5 MB</b>.</p>
 {% if ocr_suggestions is defined and ocr_suggestions %}
@@ -12,6 +13,7 @@ Voter ID. Accepted formats: <b>JPG or PDF, maximum size 5 MB</b>.</p>
   correct your personal details yourself if needed.</p>
   {% if ocr_suggestions.name %}<p><b>Possible name:</b> {{ ocr_suggestions.name }}</p>{% endif %}
   {% if ocr_suggestions.dates %}<p><b>Possible date(s):</b> {{ ocr_suggestions.dates | join(", ") }}</p>{% endif %}
+  {% for hint in ocr_hints %}<p><b>Check:</b> {{ hint }}</p>{% endfor %}
   {% if not ocr_suggestions.name and not ocr_suggestions.dates %}
   <p>No name or date suggestion was found. Please review your document and form manually.</p>
   {% endif %}

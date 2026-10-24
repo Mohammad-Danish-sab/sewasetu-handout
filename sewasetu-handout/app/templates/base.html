@@ -264,6 +264,54 @@ table.tbl th{background:#eff4ef}
     button.addEventListener("click", () => sendQuestion(button.dataset.chatQuestion));
   });
 })();
+(() => {
+  const form = document.querySelector("[data-form-assistance]");
+  const guidance = document.getElementById("form-assistance");
+  if (!form || !guidance) return;
+
+  const validate = () => {
+    const issues = [];
+    if (form.dataset.formAssistance === "personal") {
+      const dob = form.elements.dob.value.trim();
+      const dateParts = dob.split("/");
+      if (dob && (dateParts.length !== 3 || dateParts[2].length !== 4)) {
+        issues.push("Enter date of birth in DD/MM/YYYY format.");
+      }
+      if (form.elements.marital_status.value === "Widowed") {
+        if (!form.elements.husband_name.value.trim()) {
+          issues.push("Enter the spouse name required for this selection.");
+        }
+        if (!form.elements.husband_employer.value.trim()) {
+          issues.push("Enter the spouse employer required for this selection.");
+        }
+      }
+    } else if (form.dataset.formAssistance === "address") {
+      if (!form.elements.village.value.trim()) {
+        issues.push("Enter your village or town.");
+      }
+      if (!form.elements.block.value) {
+        issues.push("Select your block.");
+      }
+    } else if (form.dataset.formAssistance === "bank") {
+      const account = form.elements.bank_account.value.trim();
+      const ifsc = form.elements.ifsc.value.trim();
+      if (account && !/^[0-9]{9,18}$/.test(account)) {
+        issues.push("Check the account number format: 9–18 digits.");
+      }
+      if (ifsc && !/^[A-Za-z]{4}0[A-Za-z0-9]{6}$/.test(ifsc)) {
+        issues.push("Check the 11-character IFSC format.");
+      }
+    }
+    guidance.textContent = issues.length
+      ? "Please review: " + issues.join(" ")
+      : "No format issues found so far. Confirm every detail against your documents before continuing. These local checks do not determine eligibility.";
+    guidance.classList.toggle("flash", issues.length > 0);
+    guidance.classList.toggle("note", issues.length === 0);
+  };
+  form.addEventListener("input", validate);
+  form.addEventListener("change", validate);
+  validate();
+})();
 </script>
 </body>
 </html>

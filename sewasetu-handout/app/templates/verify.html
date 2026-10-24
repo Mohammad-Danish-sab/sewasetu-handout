@@ -2,6 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 1 of 6:</b> Mobile Verification</div>
 <h2>Enter OTP</h2>
+{% if chatbot_enabled %}<p class="note">Never enter your OTP in the assistant chat.</p><p><button class="btn btn-secondary" type="button" data-chat-question="How do I safely enter and verify my OTP? Do not ask me to provide the code.">Get OTP help</button></p>{% endif %}
 <p class="note">This demo does not send texts to real phones. For testing, use the OTP shown in the <a href="{{ url_for('gateway_proxy') }}">SMS gateway console</a>. The OTP is valid for 5 minutes.</p>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

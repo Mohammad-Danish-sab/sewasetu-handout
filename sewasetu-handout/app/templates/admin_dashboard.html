@@ -22,4 +22,11 @@
 <tr><td>{{ b }}</td><td style="text-align:right">{{ c }}</td></tr>
 {% endfor %}
 </table>
+
+<section class="home-section" aria-labelledby="operations-insights-heading">
+  <h3 id="operations-insights-heading">Operations insights</h3>
+  <p class="note">Rule-based observations from aggregate dashboard counts only.
+  These are workload prompts, not eligibility or application decisions.</p>
+  <ul>{% for insight in insights %}<li>{{ insight }}</li>{% endfor %}</ul>
+</section>
 {% endblock %}

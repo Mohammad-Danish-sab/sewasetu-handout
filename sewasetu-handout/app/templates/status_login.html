@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Application Status Portal</h2>
+{% if chatbot_enabled %}<p class="note">Need help using the status portal? Ask the assistant a general question. Do not share your mobile number, password, or application details in chat.</p><p><button class="btn btn-secondary" type="button" data-chat-question="How do I use the Sewa Setu status portal safely?">Get status-portal help</button></p>{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="mobile">Mobile Number</label>

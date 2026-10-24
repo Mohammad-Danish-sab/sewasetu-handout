@@ -12,6 +12,12 @@ os.environ.setdefault("SEWASETU_ADMIN_PASSWORD", "test-password-keep-this-out-of
 
 from app import app as app_module
 from app.ai_assistant import _plain_text_answer
+from app.ai_workflows import (
+    applicant_document_hints,
+    application_status_guidance,
+    operations_insights,
+    staff_review_assistance,
+)
 from app.db import connect_db
 from app.app import app, get_db, hash_password, sanitize
 
@@ -142,6 +148,176 @@ def test_chatbot_rejects_invalid_questions_without_calling_provider(client, monk
 )
 def test_model_json_is_displayed_as_plain_answer(provider_answer, expected):
     assert _plain_text_answer(provider_answer) == expected
+
+
+def test_status_guidance_uses_status_and_never_changes_it():
+    today = date(2026, 10, 25)
+
+    assert "being processed" in application_status_guidance(
+        "PENDING", date(2026, 10, 20), None, today=today
+    )
+    overdue = application_status_guidance(
+        "PENDING", date(2026, 10, 1), None, today=today
+    )
+    assert "does not change" in overdue
+    assert "approved" not in overdue.lower()
+    assert "approved" in application_status_guidance(
+        "DEEMED_APPROVED", date(2026, 10, 1), None, today=today
+    ).lower()
+
+
+def test_applicant_document_hints_flag_possible_mismatch_without_autofill():
+    hints = applicant_document_hints(
+        {"applicant_name": "Asha Devi", "dob": "01/01/1940"},
+        {"name": "Mina Devi", "dates": ["01/01/1941"]},
+    )
+
+    assert len(hints) == 2
+    assert all("Compare" in hint or "Check" in hint for hint in hints)
+
+
+def test_staff_review_assistance_is_local_and_not_an_outcome():
+    application = (
+        "SSP26123456",
+        "Asha Devi",
+        "9876543210",
+        date(1940, 1, 1),
+        "Female",
+        "Widowed",
+        "Village",
+        "Sonari",
+        "123456789",
+        "ABCD0123456",
+        "stored-document.pdf",
+        "PENDING",
+        datetime(2026, 10, 1),
+        None,
+        None,
+    )
+
+    result = staff_review_assistance(
+        application,
+        ocr_suggestions={"name": "Mina Devi", "dates": ["01/01/1941"]},
+    )
+
+    assert any("name suggestion may differ" in item for item in result["checks"])
+    assert any("date of birth was not" in item for item in result["checks"])
+    assert "does not determine eligibility" in result["notice"]
+
+
+def test_operations_insights_use_aggregate_counts_only():
+    insights = operations_insights(
+        [("PENDING", 12), ("APPROVED", 8)],
+        3,
+        [("Sonari", 7), ("Namti", 5)],
+    )
+
+    assert any("12 of 20 applications are pending" in item for item in insights)
+    assert any("3 pending applications" in item for item in insights)
+    assert any("Sonari" in item for item in insights)
+    assert all("Asha" not in item for item in insights)
+
+
+def test_status_page_shows_local_guidance_without_calling_llm(client, monkeypatch):
+    application = (
+        "SSP26123456",
+        "Asha Devi",
+        "9876543210",
+        date(1940, 1, 1),
+        "Sonapur",
+        "Sonari",
+        "123456789",
+        "ABCD0123456",
+        "PENDING",
+        datetime.now(),
+        None,
+    )
+
+    class Cursor:
+        def execute(self, *_):
+            pass
+
+        def fetchone(self):
+            return application
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app_module, "get_db", lambda: Connection())
+    monkeypatch.setattr(
+        app_module.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("Status data must not be sent to an LLM."),
+    )
+    with client.session_transaction() as sess:
+        sess["logged_in"] = True
+        sess["portal_mobile"] = "9876543210"
+
+    response = client.get("/application/42")
+
+    assert response.status_code == 200
+    assert b"Status guidance" in response.data
+    assert b"being processed" in response.data
+
+
+def test_staff_case_assistance_uses_local_rules_without_llm(client, monkeypatch):
+    application = (
+        "SSP26123456",
+        "Asha Devi",
+        "9876543210",
+        date(1940, 1, 1),
+        "Female",
+        "Widowed",
+        "Sonapur",
+        "Sonari",
+        "123456789",
+        "ABCD0123456",
+        None,
+        "PENDING",
+        datetime.now(),
+        None,
+        None,
+    )
+
+    class Cursor:
+        def execute(self, *_):
+            pass
+
+        def fetchone(self):
+            return application
+
+        def close(self):
+            pass
+
+    class Connection:
+        def cursor(self):
+            return Cursor()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app_module, "get_db", lambda: Connection())
+    monkeypatch.setattr(
+        app_module.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("Case data must not be sent to an LLM."),
+    )
+    with client.session_transaction() as sess:
+        sess["admin"] = True
+
+    response = client.get("/admin/application/42")
+
+    assert response.status_code == 200
+    assert b"Local review assistance" in response.data
+    assert b"No age-proof document is linked" in response.data
+    assert b"does not determine eligibility" in response.data
 
 
 def test_chatbot_rejects_unsupported_language_without_calling_provider(

@@ -3,12 +3,13 @@
 <div class="steps"><b>Step 4 of 6:</b> Bank Details</div>
 <h2>Bank Details for Pension Disbursement</h2>
 {% if chatbot_enabled %}<p class="note">Never enter or share bank details in the AI assistant.</p><p><button class="btn btn-secondary" type="button" data-chat-question="How do I complete the bank details step without sharing my account information?">Ask the assistant for general help</button></p>{% endif %}
-<form method="post">
+<div class="flash" id="form-assistance" role="status" aria-live="polite">Smart check: account number must contain 9–18 digits and IFSC must match the required format. Checks run in this browser; bank details are not sent to the AI assistant.</div>
+<form method="post" data-form-assistance="bank">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="bank_account">Bank Account Number</label>
-  <input id="bank_account" type="text" name="bank_account" inputmode="numeric" pattern="[0-9]{9,18}" maxlength="18" autocomplete="off" value="{{ data.get('bank_account','') }}" required>
+  <input id="bank_account" type="text" name="bank_account" inputmode="numeric" pattern="[0-9]{9,18}" maxlength="18" autocomplete="off" value="{{ data.get('bank_account','') }}" required data-sensitive>
   <label for="ifsc">IFSC Code</label>
-  <input id="ifsc" type="text" name="ifsc" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" maxlength="11" autocapitalize="characters" value="{{ data.get('ifsc','') }}" required>
+  <input id="ifsc" type="text" name="ifsc" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}" maxlength="11" autocapitalize="characters" value="{{ data.get('ifsc','') }}" required data-sensitive>
   <p class="note">Pension will be credited by DBT to this account. Ensure the account
   is in the name of the applicant.</p>
   <p><button class="btn" type="submit">Save &amp; Continue</button></p>

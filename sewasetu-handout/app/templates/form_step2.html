@@ -3,7 +3,10 @@
 <div class="steps"><b>Step 3 of 6:</b> Address Details</div>
 <h2>Address Details</h2>
 {% if chatbot_enabled %}<p><button class="btn btn-secondary" type="button" data-chat-question="How do I complete the address details step?">Ask the assistant for help</button></p>{% endif %}
-<form method="post">
+<p class="note">Smart check: enter your village or town and select your block from
+the list. Do not send your address in the assistant chat.</p>
+<div class="flash" id="form-assistance" role="status" aria-live="polite">Form checks run in this browser. Your entries are not sent to the AI assistant.</div>
+<form method="post" data-form-assistance="address">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="village">Village / Town</label>
   <input id="village" type="text" name="village" maxlength="100" autocomplete="address-level2" value="{{ data.get('village','') }}" required>

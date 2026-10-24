@@ -3,7 +3,11 @@
 <div class="steps"><b>Step 2 of 6:</b> Personal Details</div>
 <h2>Personal Details</h2>
 {% if chatbot_enabled %}<p><button class="btn btn-secondary" type="button" data-chat-question="How do I complete the personal details step?">Ask the assistant for help</button></p>{% endif %}
-<form method="post">
+<p class="note">Smart check: enter the applicant’s name as it appears on the age-proof
+document. Use DD/MM/YYYY for date of birth. The portal checks the scheme's minimum
+age when you submit.</p>
+<div class="flash" id="form-assistance" role="status" aria-live="polite">Form checks run in this browser. Your entries are not sent to the AI assistant.</div>
+<form method="post" data-form-assistance="personal">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="applicant_name">Full Name of Applicant (as per age proof document)</label>
   <input id="applicant_name" type="text" name="applicant_name" maxlength="100" autocomplete="name" value="{{ data.get('applicant_name','') }}" required>

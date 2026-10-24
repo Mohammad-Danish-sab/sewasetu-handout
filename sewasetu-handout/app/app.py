@@ -23,10 +23,22 @@ import requests
 import psycopg2
 if __package__:
     from .ai_assistant import answer_question, LANGUAGES
+    from .ai_workflows import (
+        applicant_document_hints,
+        application_status_guidance,
+        operations_insights,
+        staff_review_assistance,
+    )
     from .db import connect_db
     from .document_ocr import extract_age_proof_suggestions, OCRUnavailableError
 else:
     from ai_assistant import answer_question, LANGUAGES
+    from ai_workflows import (
+        applicant_document_hints,
+        application_status_guidance,
+        operations_insights,
+        staff_review_assistance,
+    )
     from db import connect_db
     from document_ocr import extract_age_proof_suggestions, OCRUnavailableError
 from flask import (Flask, g, has_app_context, request, session, redirect,
@@ -153,6 +165,21 @@ def chatbot_url_is_secure():
 @app.context_processor
 def inject_chatbot_config():
     return {"chatbot_enabled": chatbot_configured()}
+
+
+def safe_document_path(path):
+    if not path:
+        return None
+    upload_dir = os.path.realpath(UPLOAD_DIR)
+    document_path = os.path.realpath(path)
+    try:
+        if os.path.commonpath((upload_dir, document_path)) != upload_dir:
+            return None
+    except ValueError:
+        return None
+    if not os.path.isfile(document_path):
+        return None
+    return document_path
 
 
 # ---------------------------------------------------------------------------
@@ -351,10 +378,15 @@ def upload():
             session["ocr_suggestions"] = extract_age_proof_suggestions(
                 content, extension
             )
+            ocr_hints = applicant_document_hints(
+                session.get("form_data", {}),
+                session["ocr_suggestions"],
+            )
             ocr_error = ""
         except OCRUnavailableError:
             app.logger.exception("Local OCR could not process an age-proof upload.")
             session["ocr_suggestions"] = {"name": "", "dates": []}
+            ocr_hints = []
             ocr_error = (
                 "Automatic reading was unavailable. Please compare the document "
                 "with the details you entered yourself."
@@ -363,11 +395,16 @@ def upload():
             "upload.html",
             ocr_suggestions=session["ocr_suggestions"],
             ocr_error=ocr_error,
+            ocr_hints=ocr_hints,
         )
     return render_template(
         "upload.html",
         ocr_suggestions=session.get("ocr_suggestions"),
         ocr_error="",
+        ocr_hints=applicant_document_hints(
+            session.get("form_data", {}),
+            session.get("ocr_suggestions", {}),
+        ),
     )
 
 
@@ -578,7 +615,15 @@ def view_application(app_id):
         abort(404)
     if session.get("admin") is not True and row[2] != session.get("portal_mobile"):
         abort(404)
-    return render_template("application.html", a=row, app_id=app_id)
+    status_guidance = application_status_guidance(
+        row[8], row[9], row[10]
+    )
+    return render_template(
+        "application.html",
+        a=row,
+        app_id=app_id,
+        status_guidance=status_guidance,
+    )
 
 
 @app.route("/admin/application/<int:app_id>/document")
@@ -590,17 +635,8 @@ def admin_document(app_id):
     cur.execute("SELECT doc_path FROM applications WHERE id = %s", (app_id,))
     row = cur.fetchone()
     cur.close(); conn.close()
-    if not row or not row[0]:
-        abort(404)
-
-    upload_dir = os.path.realpath(UPLOAD_DIR)
-    document_path = os.path.realpath(row[0])
-    try:
-        if os.path.commonpath((upload_dir, document_path)) != upload_dir:
-            abort(404)
-    except ValueError:
-        abort(404)
-    if not os.path.isfile(document_path):
+    document_path = safe_document_path(row[0] if row else None)
+    if not document_path:
         abort(404)
     return send_file(
         document_path,
@@ -710,8 +746,10 @@ def admin_dashboard():
                 "GROUP BY block ORDER BY count(*) DESC")
     by_block = cur.fetchall()
     cur.close(); conn.close()
+    insights = operations_insights(by_status, overdue, by_block)
     return render_template("admin_dashboard.html", by_status=by_status,
-                           overdue=overdue, by_block=by_block, sla=SLA_DAYS)
+                           overdue=overdue, by_block=by_block, sla=SLA_DAYS,
+                           insights=insights)
 
 
 @app.route("/admin/applications")
@@ -745,7 +783,38 @@ def admin_view(app_id):
     cur.close(); conn.close()
     if not row:
         abort(404)
-    return render_template("admin_view.html", a=row, app_id=app_id)
+    ocr_suggestions = None
+    ocr_message = ""
+    if row[10]:
+        document_path = safe_document_path(row[10])
+        if document_path:
+            extension = os.path.splitext(document_path)[1].lower()
+            try:
+                if os.path.getsize(document_path) > MAX_UPLOAD_BYTES:
+                    raise OCRUnavailableError(
+                        "The stored document is too large for local OCR."
+                    )
+                with open(document_path, "rb") as document:
+                    content = document.read(MAX_UPLOAD_BYTES + 1)
+                ocr_suggestions = extract_age_proof_suggestions(
+                    content, extension
+                )
+            except (OSError, OCRUnavailableError):
+                app.logger.exception(
+                    "Staff review local OCR failed for application id=%d", app_id
+                )
+                ocr_message = "Local OCR was unavailable for this document."
+        else:
+            ocr_message = "The stored document was not available to local OCR."
+    review_assistance = staff_review_assistance(
+        row, ocr_suggestions=ocr_suggestions, ocr_message=ocr_message
+    )
+    return render_template(
+        "admin_view.html",
+        a=row,
+        app_id=app_id,
+        review_assistance=review_assistance,
+    )
 
 
 @app.route("/admin/approve/<int:app_id>", methods=["POST"])

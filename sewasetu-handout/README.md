@@ -71,9 +71,15 @@ records.
 The portal's LangChain-based assistant retrieves relevant passages from the
 maintained files in `app/knowledge/` before answering questions. It supports
 English, Hindi, and Assamese responses, provides general application-step help,
-and can give staff a generic review checklist. The assistant has no access to
-application records, cannot check status or submit forms, and must not make
-eligibility or approval/rejection decisions. The knowledge files are a
+and can give staff a generic review checklist. Local browser checks help with
+form formats, and local OCR offers age-proof name/date suggestions for applicant
+confirmation. The applicant status page explains the displayed status using
+portal rules. Staff receive local OCR comparison prompts and aggregate,
+rule-based dashboard observations; case details and documents are not sent to
+the LLM. These are assistive workflow tools, not a model reviewing or deciding
+individual cases. The assistant has no access to application records, cannot
+check status or submit forms, and must not make eligibility or approval/rejection
+decisions. The knowledge files are a
 portal-derived starter corpus, not a substitute for approved, current scheme
 guidelines. Have the department verify them before using the assistant with
 citizens. The corpus is loaded when the app starts; restart the app after
