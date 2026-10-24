@@ -93,10 +93,13 @@ table.tbl th{background:#eff4ef}
 .chat-suggestions{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 10px}
 .chat-suggestions button{border:1px solid #cfdfd3;border-radius:99px;background:#fff;color:#28604e;padding:6px 9px;font:inherit;font-size:11px;cursor:pointer}
 .chat-suggestions button:hover{background:#edf5ee}
-.chat-form{display:flex;gap:8px;padding:12px;border-top:1px solid #e7ece5}
-.chat-form input{min-width:0;flex:1;max-width:none;min-height:42px;padding:8px 10px;border:1px solid #b9c8bf;border-radius:8px;font:inherit;font-size:13px}
+.chat-form{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;padding:12px;border-top:1px solid #e7ece5}
+.chat-form select{grid-column:1/-1;width:100%;max-width:none;min-height:38px;padding:7px 10px;font-size:13px}
+.chat-form input{grid-column:1;min-width:0;width:100%;max-width:none;min-height:42px;padding:8px 10px;border:1px solid #b9c8bf;border-radius:8px;font:inherit;font-size:13px}
 .chat-send{width:42px;flex:0 0 42px;border:0;border-radius:9px;background:#176657;color:#fff;font-size:18px;cursor:pointer}
 .chat-send:disabled{opacity:.6;cursor:wait}
+.chat-suggestions button:disabled{opacity:.55;cursor:wait}
+.chat-sources{align-self:flex-start;margin-top:-5px;color:#61736a;font-size:11px}
 .chat-unavailable{padding:16px;color:#5e6f63;font-size:13px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:760px){.home-hero{grid-template-columns:1fr;padding:28px}.hero-visual{max-width:500px;margin:-4px auto -10px}.hero-title{font-size:clamp(36px,9vw,52px)}.info-grid{grid-template-columns:1fr}.process-list{grid-template-columns:repeat(2,1fr)}}
@@ -215,6 +218,10 @@ table.tbl th{background:#eff4ef}
     const button = form.querySelector("button[type=submit]");
     button.disabled = true;
     input.disabled = true;
+    language.disabled = true;
+    document.querySelectorAll("[data-chat-question]").forEach((suggestion) => {
+      suggestion.disabled = true;
+    });
     try {
       const response = await fetch("{{ url_for('chatbot') }}", {
         method: "POST",
@@ -227,16 +234,23 @@ table.tbl th{background:#eff4ef}
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "The assistant couldn't respond just now.");
       pending.remove();
-      const sources = Array.isArray(result.sources) && result.sources.length
-        ? "\n\nSources: " + result.sources.join(", ")
-        : "";
-      appendMessage(result.reply + sources, "");
+      appendMessage(result.reply, "");
+      if (Array.isArray(result.sources) && result.sources.length) {
+        const sourceNote = document.createElement("div");
+        sourceNote.className = "chat-sources";
+        sourceNote.textContent = "Sources: " + result.sources.join(", ");
+        log.appendChild(sourceNote);
+      }
     } catch (error) {
       pending.remove();
       appendMessage(error.message || "The assistant couldn't respond just now. Please try again later.", "error");
     } finally {
       button.disabled = false;
       input.disabled = false;
+      language.disabled = false;
+      document.querySelectorAll("[data-chat-question]").forEach((suggestion) => {
+        suggestion.disabled = false;
+      });
       input.focus();
     }
   };

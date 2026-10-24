@@ -136,44 +136,53 @@ def _call_provider(messages, *, url, api_key, model, post):
 
 
 def _plain_text_answer(answer):
-    text = answer.strip()
-    fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
-    candidate = fenced.group(1) if fenced else text
-    try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError:
-        return text
+    preferred_keys = (
+        "answer", "reply", "response", "final", "output", "generated_text",
+        "message", "content", "text", "result", "summary",
+    )
+    ignored_keys = {"sources", "citations", "metadata", "id", "type", "status"}
 
-    preferred_keys = ("answer", "reply", "response", "message", "content", "text", "result")
-
-    def find_answer(value):
+    def find_answer(value, depth=0):
+        if depth > 5:
+            return ""
         if isinstance(value, str):
-            return value.strip()
+            text = value.strip()
+            fenced = re.fullmatch(
+                r"```(?:json)?\s*(.*?)\s*```",
+                text,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            candidate = fenced.group(1).strip() if fenced else text
+            if candidate.startswith(("{", "[", '"')):
+                try:
+                    parsed = json.loads(candidate)
+                except json.JSONDecodeError:
+                    return text
+                if parsed != value:
+                    return find_answer(parsed, depth + 1)
+            return text
         if isinstance(value, dict):
             for key in preferred_keys:
                 if key in value:
-                    extracted = find_answer(value[key])
+                    extracted = find_answer(value[key], depth + 1)
                     if extracted:
                         return extracted
-            return ""
+            parts = [
+                extracted
+                for key, item in value.items()
+                if key.casefold() not in ignored_keys
+                and (extracted := find_answer(item, depth + 1))
+            ]
+            return "\n".join(parts)
         if isinstance(value, list):
             return "\n".join(
                 extracted
                 for item in value
-                if (extracted := find_answer(item))
+                if (extracted := find_answer(item, depth + 1))
             )
         return ""
 
-    extracted = find_answer(parsed)
-    if extracted:
-        return extracted
-    if isinstance(parsed, dict):
-        return "\n".join(
-            f"{key}: {value}"
-            for key, value in parsed.items()
-            if isinstance(value, (str, int, float)) and not isinstance(value, bool)
-        )
-    return text
+    return find_answer(answer) or answer.strip()
 
 
 def answer_question(question, language, *, url, api_key, model, post):

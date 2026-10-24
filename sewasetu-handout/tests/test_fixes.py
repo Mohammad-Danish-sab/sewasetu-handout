@@ -131,6 +131,12 @@ def test_chatbot_rejects_invalid_questions_without_calling_provider(client, monk
          "Residents aged 60 or older may apply."),
         ('```json\n{"reply":"Upload a JPG or PDF under 5 MB."}\n```',
          "Upload a JPG or PDF under 5 MB."),
+        ('"{\\"output\\":\\"Please contact your local office.\\"}"',
+         "Please contact your local office."),
+        ('{"data":{"final":"Applications take up to 15 days."}}',
+         "Applications take up to 15 days."),
+        ('{"type":"text","text":"You can apply online."}',
+         "You can apply online."),
         ("A normal plain text response.", "A normal plain text response."),
     ],
 )
