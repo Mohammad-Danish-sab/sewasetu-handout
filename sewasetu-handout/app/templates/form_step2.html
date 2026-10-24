@@ -2,6 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 3 of 6:</b> Address Details</div>
 <h2>Address Details</h2>
+{% if chatbot_enabled %}<p><button class="btn btn-secondary" type="button" data-chat-question="How do I complete the address details step?">Ask the assistant for help</button></p>{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="village">Village / Town</label>

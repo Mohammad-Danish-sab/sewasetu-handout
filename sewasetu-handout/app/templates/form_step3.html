@@ -2,6 +2,7 @@
 {% block content %}
 <div class="steps"><b>Step 4 of 6:</b> Bank Details</div>
 <h2>Bank Details for Pension Disbursement</h2>
+{% if chatbot_enabled %}<p class="note">Never enter or share bank details in the AI assistant.</p><p><button class="btn btn-secondary" type="button" data-chat-question="How do I complete the bank details step without sharing my account information?">Ask the assistant for general help</button></p>{% endif %}
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="bank_account">Bank Account Number</label>

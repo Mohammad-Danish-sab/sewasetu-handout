@@ -66,12 +66,22 @@ mobile-OTP flow remains unchanged and is not Aadhaar verification. Applying
 `app/scripts/init_database.py` creates the new table without modifying citizen
 records.
 
-## Optional AI assistant
+## AI assistant, RAG, and local OCR
 
-The portal includes an English-language assistant for general pension-scheme
-and application-process questions. It uses an OpenAI-compatible chat-completions
-endpoint and is disabled until configured. Add the provider's HTTPS endpoint,
-API key, and model to `.env`:
+The portal's LangChain-based assistant retrieves relevant passages from the
+maintained files in `app/knowledge/` before answering questions. It supports
+English, Hindi, and Assamese responses, provides general application-step help,
+and can give staff a generic review checklist. The assistant has no access to
+application records, cannot check status or submit forms, and must not make
+eligibility or approval/rejection decisions. The knowledge files are a
+portal-derived starter corpus, not a substitute for approved, current scheme
+guidelines. Have the department verify them before using the assistant with
+citizens. The corpus is loaded when the app starts; restart the app after
+updating files under `app/knowledge/`.
+
+AI text responses use an OpenAI-compatible chat-completions endpoint and are
+disabled until configured. Add the provider's HTTPS endpoint, API key, and
+model to `.env`:
 
 ```dotenv
 SEWASETU_AI_API_URL=https://your-provider.example/v1/chat/completions
@@ -81,11 +91,23 @@ SEWASETU_AI_MODEL=your-model-name
 
 Use the endpoint, key, and model values supplied by your AI provider. Never
 commit or share the API key. Rebuild/restart the app after changing `.env`:
-`docker compose up --build -d`. User questions are sent to that provider to
-generate answers; do not enter personal details, OTPs, passwords, or bank
-information. The assistant cannot access applications or make official
-eligibility decisions, and it directs questions outside the published scheme
-guidance to the nearest Block Development Office.
+`docker compose up --build -d`. Citizen questions and retrieved public
+knowledge passages are sent to that provider. The chat interface warns users
+not to enter personal details, OTPs, passwords, or bank information; application
+records and uploaded documents are never passed to the LLM. Check your provider's
+data retention and processing terms before enabling the feature.
+
+Age-proof OCR runs locally in the portal container using Tesseract; the image or
+PDF is not sent to the LLM provider. It only shows tentative name/date
+suggestions, never updates form fields, and requires the applicant to compare
+the document and confirm review. OCR requires the Tesseract English, Hindi, and
+Assamese language packages installed by the supplied Dockerfile. On non-Docker
+deployments, install those packages separately.
+
+Before public deployment, have an authorized department owner approve and
+maintain the knowledge base and translations, review the provider's privacy
+terms, and test with non-production data. AI output is advisory and can be
+wrong.
 
 ## Optional local PostgreSQL
 

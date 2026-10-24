@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends cron fonts-noto-core \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-hin tesseract-ocr-asm \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

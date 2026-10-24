@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h2>Dashboard</h2>
+{% if chatbot_enabled %}<p class="note">For generic policy review guidance, ask the AI assistant. Do not enter application details; it cannot review records or make decisions.</p><p><button class="btn btn-secondary" type="button" data-chat-question="What general checklist should staff use when reviewing a pending pension application?">Get a general review checklist</button></p>{% endif %}
 <p><a href="/admin/applications?status=PENDING">Pending</a> |
 <a href="/admin/applications?status=APPROVED">Approved</a> |
 <a href="/admin/applications?status=REJECTED">Rejected</a> |

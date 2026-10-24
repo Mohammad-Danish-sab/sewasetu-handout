@@ -11,6 +11,7 @@ os.environ.setdefault("SEWASETU_ADMIN_USERNAME", "test-admin")
 os.environ.setdefault("SEWASETU_ADMIN_PASSWORD", "test-password-keep-this-out-of-production")
 
 from app import app as app_module
+from app.ai_assistant import _plain_text_answer
 from app.db import connect_db
 from app.app import app, get_db, hash_password, sanitize
 
@@ -89,6 +90,7 @@ def test_chatbot_uses_configured_provider_and_returns_reply(client, monkeypatch)
 
     assert response.status_code == 200
     assert response.get_json()["reply"] == "Residents aged 60 or older may apply."
+    assert "scheme" in response.get_json()["sources"][0].lower()
     assert calls[0][0] == "https://ai.example.test/v1/chat/completions"
     assert calls[0][1]["headers"]["Authorization"] == "Bearer test-provider-key"
     assert calls[0][1]["json"]["model"] == "test-model"
@@ -96,6 +98,9 @@ def test_chatbot_uses_configured_provider_and_returns_reply(client, monkeypatch)
         "role": "user",
         "content": "Who can apply?",
     }
+    system_message = calls[0][1]["json"]["messages"][0]["content"]
+    assert "Retrieved source excerpts" in system_message
+    assert "Residents of Purvanchal" in system_message
     assert calls[0][1]["timeout"] == (5, 45)
 
 
@@ -117,6 +122,126 @@ def test_chatbot_rejects_invalid_questions_without_calling_provider(client, monk
 
     assert too_long.status_code == 400
     assert empty.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("provider_answer", "expected"),
+    [
+        ('{"answer":"Residents aged 60 or older may apply."}',
+         "Residents aged 60 or older may apply."),
+        ('```json\n{"reply":"Upload a JPG or PDF under 5 MB."}\n```',
+         "Upload a JPG or PDF under 5 MB."),
+        ("A normal plain text response.", "A normal plain text response."),
+    ],
+)
+def test_model_json_is_displayed_as_plain_answer(provider_answer, expected):
+    assert _plain_text_answer(provider_answer) == expected
+
+
+def test_chatbot_rejects_unsupported_language_without_calling_provider(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        app_module, "AI_CHATBOT_API_URL",
+        "https://ai.example.test/v1/chat/completions",
+    )
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "test-provider-key")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "test-model")
+    monkeypatch.setattr(
+        app_module.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("Provider must not be called."),
+    )
+
+    response = client.post(
+        "/api/chatbot",
+        json={"message": "Who can apply?", "language": "Unknown"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_chatbot_never_adds_application_fields_to_provider_request(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        app_module, "AI_CHATBOT_API_URL",
+        "https://ai.example.test/v1/chat/completions",
+    )
+    monkeypatch.setattr(app_module, "AI_CHATBOT_API_KEY", "test-provider-key")
+    monkeypatch.setattr(app_module, "AI_CHATBOT_MODEL", "test-model")
+    calls = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Use the protected portal."}}]}
+
+    monkeypatch.setattr(
+        app_module.requests,
+        "post",
+        lambda url, **kwargs: (calls.append(kwargs) or Response()),
+    )
+
+    response = client.post(
+        "/api/chatbot",
+        json={
+            "message": "How do I review this application?",
+            "language": "Hindi",
+            "applicant_name": "Private Test Name",
+            "bank_account": "123456789012",
+        },
+    )
+
+    assert response.status_code == 200
+    provider_request = str(calls[0]["json"])
+    assert "Private Test Name" not in provider_request
+    assert "123456789012" not in provider_request
+    assert "Hindi" in calls[0]["json"]["messages"][0]["content"]
+
+
+def test_upload_requires_applicant_confirmation_after_local_ocr(
+    client, monkeypatch, tmp_path
+):
+    with client.session_transaction() as sess:
+        sess["verified_mobile"] = "9876543210"
+    monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        app_module,
+        "extract_age_proof_suggestions",
+        lambda content, extension: {
+            "name": "Test Person",
+            "dates": ["01/01/1940"],
+        },
+    )
+
+    upload = client.post(
+        "/upload",
+        data={"document": (BytesIO(b"\xff\xd8\xfftest"), "age-proof.jpg")},
+        content_type="multipart/form-data",
+    )
+
+    assert upload.status_code == 200
+    assert b"Test Person" in upload.data
+    assert b"has been changed in your form" in upload.data
+    with client.session_transaction() as sess:
+        assert sess["ocr_review_pending"] is True
+
+    not_confirmed = client.post("/upload", data={"confirm_review": "1"})
+    assert not_confirmed.status_code == 302
+    with client.session_transaction() as sess:
+        assert sess["ocr_review_pending"] is True
+
+    confirmed = client.post(
+        "/upload",
+        data={"confirm_review": "1", "reviewed": "yes"},
+    )
+    assert confirmed.status_code == 302
+    assert confirmed.headers["Location"].endswith("/declaration")
+    with client.session_transaction() as sess:
+        assert "ocr_review_pending" not in sess
 
 
 def test_chatbot_does_not_send_api_key_over_plain_http(client, monkeypatch):
@@ -291,6 +416,11 @@ def test_uploaded_document_format_size_and_filename_are_safe(
     client, monkeypatch, tmp_path
 ):
     monkeypatch.setattr(app_module, "UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        app_module,
+        "extract_age_proof_suggestions",
+        lambda content, extension: {"name": "", "dates": []},
+    )
     with client.session_transaction() as sess:
         sess["verified_mobile"] = "9876543210"
 
@@ -300,7 +430,8 @@ def test_uploaded_document_format_size_and_filename_are_safe(
         content_type="multipart/form-data",
     )
 
-    assert response.status_code == 302
+    assert response.status_code == 200
+    assert b"Check the document suggestions" in response.data
     saved_files = list(tmp_path.iterdir())
     assert len(saved_files) == 1
     assert saved_files[0].name.startswith("9876543210_")

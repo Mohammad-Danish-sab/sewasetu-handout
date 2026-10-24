@@ -143,7 +143,7 @@ table.tbl th{background:#eff4ef}
     <div><strong>Sewa Setu Assistant</strong><span>Scheme and application help</span></div>
     <button class="chat-close" id="chat-close" type="button" aria-label="Close assistant">&times;</button>
   </div>
-  <p class="chat-disclaimer">AI answers can be wrong and are not official decisions. Do not share personal details, OTPs, passwords, or bank information. Questions are sent to the configured AI provider.</p>
+  <p class="chat-disclaimer">AI answers can be wrong and are not official decisions. Do not share personal details, OTPs, passwords, bank information, or documents. Your question is sent to the configured AI provider; application records and uploaded documents are not.</p>
   {% if chatbot_enabled %}
   <div class="chat-log" id="chat-log" aria-live="polite" aria-relevant="additions text">
     <div class="chat-bubble">Hello! I can help with general questions about the pension scheme and how to apply.</div>
@@ -155,6 +155,12 @@ table.tbl th{background:#eff4ef}
   </div>
   <form class="chat-form" id="chat-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="sr-only" for="chat-language">Response language</label>
+    <select id="chat-language" name="language" aria-label="Response language">
+      <option>English</option>
+      <option>Hindi</option>
+      <option>Assamese</option>
+    </select>
     <label class="sr-only" for="chat-message">Ask a question</label>
     <input id="chat-message" name="message" type="text" maxlength="1000" placeholder="Ask a scheme question..." autocomplete="off" required>
     <button class="chat-send" type="submit" aria-label="Send question">&#10148;</button>
@@ -188,7 +194,8 @@ table.tbl th{background:#eff4ef}
   const form = document.getElementById("chat-form");
   const log = document.getElementById("chat-log");
   const input = document.getElementById("chat-message");
-  if (!form || !log || !input) return;
+  const language = document.getElementById("chat-language");
+  if (!form || !log || !input || !language) return;
 
   const appendMessage = (text, kind) => {
     const bubble = document.createElement("div");
@@ -215,12 +222,15 @@ table.tbl th{background:#eff4ef}
           "Content-Type": "application/json",
           "X-CSRFToken": form.elements.csrf_token.value
         },
-        body: JSON.stringify({message: question})
+        body: JSON.stringify({message: question, language: language.value})
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "The assistant couldn't respond just now.");
       pending.remove();
-      appendMessage(result.reply, "");
+      const sources = Array.isArray(result.sources) && result.sources.length
+        ? "\n\nSources: " + result.sources.join(", ")
+        : "";
+      appendMessage(result.reply + sources, "");
     } catch (error) {
       pending.remove();
       appendMessage(error.message || "The assistant couldn't respond just now. Please try again later.", "error");

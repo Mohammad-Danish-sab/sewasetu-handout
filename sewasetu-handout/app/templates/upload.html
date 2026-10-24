@@ -4,10 +4,34 @@
 <h2>Upload Age Proof Document</h2>
 <p class="note">Accepted documents: Birth certificate, School leaving certificate,
 Voter ID. Accepted formats: <b>JPG or PDF, maximum size 5 MB</b>.</p>
+{% if ocr_suggestions is defined and ocr_suggestions %}
+<section class="flash" aria-live="polite">
+  <h3>Check the document suggestions</h3>
+  <p>These suggestions were read on this server. OCR can make mistakes; nothing
+  has been changed in your form. Compare them with your age-proof document and
+  correct your personal details yourself if needed.</p>
+  {% if ocr_suggestions.name %}<p><b>Possible name:</b> {{ ocr_suggestions.name }}</p>{% endif %}
+  {% if ocr_suggestions.dates %}<p><b>Possible date(s):</b> {{ ocr_suggestions.dates | join(", ") }}</p>{% endif %}
+  {% if not ocr_suggestions.name and not ocr_suggestions.dates %}
+  <p>No name or date suggestion was found. Please review your document and form manually.</p>
+  {% endif %}
+  {% if ocr_error %}<p>{{ ocr_error }}</p>{% endif %}
+  <p><b>Privacy:</b> the document is processed locally by this portal. It is not sent to the AI provider.</p>
+</section>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="confirm_review" value="1">
+  <label><input type="checkbox" name="reviewed" value="yes" required>
+    I compared the suggestions (or reviewed the document manually) and will
+    correct my personal details if needed.</label>
+  <p><button class="btn" type="submit">Continue to Declaration</button></p>
+</form>
+{% else %}
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label for="document">Select Document</label>
   <input id="document" type="file" name="document" accept=".jpg,.jpeg,.pdf,image/jpeg,application/pdf" required>
-  <p><button class="btn" type="submit">Upload &amp; Continue</button></p>
+  <p><button class="btn" type="submit">Upload &amp; Review</button></p>
 </form>
+{% endif %}
 {% endblock %}
